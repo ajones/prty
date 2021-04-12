@@ -3,7 +3,6 @@ module github.com/inburst/prty
 go 1.13
 
 require (
-	github.com/charmbracelet/bubbles v0.7.6
 	github.com/charmbracelet/bubbletea v0.13.2
 	github.com/charmbracelet/glamour v0.3.0
 	github.com/charmbracelet/lipgloss v0.1.2
@@ -21,6 +20,7 @@ require (
 	github.com/onsi/ginkgo v1.10.3
 	github.com/onsi/gomega v1.7.1
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
+	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/oauth2 v0.0.0-20210402161424-2e8d93401602
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
 	gopkg.in/go-playground/validator.v9 v9.30.2 // indirect
