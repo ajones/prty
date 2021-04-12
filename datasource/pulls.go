@@ -83,6 +83,23 @@ func (pr *PullRequest) calculateStatusFields(orgName string) {
 }
 
 func (d *Datasource) calculateImportance(pr *PullRequest) {
+	delta := pr.PR.GetAdditions() + pr.PR.GetDeletions()
+	switch {
+	case delta < 100:
+		pr.Importance = 1
+	case delta < 250:
+		pr.Importance = 2
+	case delta < 1000:
+		pr.Importance = 3
+	}
+
+	// If my PR, and approved: pr.Importance=0
+	// If not author, already replied, and not yet re-requested: pr.Importance=4
+	// If author, and no one has reviewed: pr.Importance=4
+	// "Interesting PRs": pr.Importance=5
+
+	// Sort by most recent activity first.
+
 	pr.Importance = 0
 
 	// 0. if I am not the author and it is approved we dont need to look at it
