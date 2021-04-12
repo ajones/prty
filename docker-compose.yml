@@ -1,0 +1,24 @@
+version: "3.7"
+
+networks:
+  custom_network:
+    external:
+      name: ${COMPOSE_NETWORK:-prty}
+
+services:
+  prty:
+    networks:
+      - custom_network
+    hostname: prty
+    environment:
+      PORT: ${SERVICE_PORT:-3200}
+      ENV: ${ENV_REF:-local}
+      SERVICE_NAME: ${SERVICE_NAME:-prty}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-deployable}
+      args:
+        SERVICE_NAME: ${SERVICE_NAME}
+    ports:
+      - "3200:3200"

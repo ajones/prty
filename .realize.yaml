@@ -1,0 +1,19 @@
+schema:
+- name: prty
+  path: .
+  commands: 
+    install:
+      status: true
+      method: go build -o /go/bin/prty
+    run:
+      status: true
+      method: /go/bin/prty
+  watcher:
+    extensions:
+    - go
+    paths:
+    - /
+    ignore:
+      paths:
+      - .git
+      - .realize
