@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v34/github"
 )
 
 type PRDetail struct{}

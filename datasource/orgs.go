@@ -2,19 +2,29 @@ package datasource
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v34/github"
 )
 
 var currentOrgs []*github.Organization
 
 func GetAllOrgs() ([]*github.Organization, error) {
-	if len(currentOrgs) > 0 {
-		return currentOrgs, nil
-	}
-
 	ctx := context.Background()
-	orgs, _, err := sharedClient().Organizations.List(ctx, "", nil)
-	currentOrgs = orgs
-	return orgs, err
+	opt := &github.ListOptions{PerPage: 10}
+	// get all pages of results
+	var allOrgs []*github.Organization
+	for {
+		reviews, resp, err := sharedClient().Organizations.List(ctx, "", opt)
+		if err != nil {
+			fmt.Printf("%s", err)
+			return allOrgs, err
+		}
+		allOrgs = append(allOrgs, reviews...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return allOrgs, nil
 }
