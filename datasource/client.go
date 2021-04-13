@@ -6,15 +6,19 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v34/github"
 	"golang.org/x/oauth2"
 )
 
 type Datasource struct {
-	statusChan chan<- string
+	statusChan   chan<- string
+	prUpdateChan chan<- *PullRequest
 
 	myUsername      string
 	myTeamUsernames []string
+
+	orgWhitelist []string
+	orgBlacklist []string
 }
 
 var sharedGithubClient *github.Client
@@ -37,50 +41,77 @@ func New() *Datasource {
 	ds := &Datasource{}
 	ds.myUsername = os.Getenv("GITHUB_USERNAME")
 	ds.myTeamUsernames = strings.Split(os.Getenv("GITHUB_USERNAME"), ",")
+
+	ds.orgWhitelist = strings.Split(os.Getenv("ORG_WHITELIST"), ",")
+	ds.orgBlacklist = strings.Split(os.Getenv("ORG_BLACKLIST"), ",")
+
 	return ds
 }
 
-func (d *Datasource) writeStatus(message string) {
-	d.statusChan <- message
+func (ds *Datasource) writeErrorStatus(err error) {
+	ds.statusChan <- fmt.Sprintf("ERROR: %s", err)
 }
 
-func (d *Datasource) SetStatusChan(statusChan chan<- string) {
-	d.statusChan = statusChan
+func (ds *Datasource) writeStatus(message string) {
+	ds.statusChan <- message
 }
 
-func (d *Datasource) RefreshData() {
-	d.writeStatus("refreshing data...")
+func (ds *Datasource) SetStatusChan(statusChan chan<- string) {
+	ds.statusChan = statusChan
+}
 
-	orgWhitelist := strings.Split(os.Getenv("ORG_WHITELIST"), ",")
-	orgBlacklist := strings.Split(os.Getenv("ORG_BLACKLIST"), ",")
+func (ds *Datasource) SetPRUpdateChan(prUpdateChan chan<- *PullRequest) {
+	ds.prUpdateChan = prUpdateChan
+}
 
-	d.writeStatus("fetching orgs...")
-	ctx := context.Background()
-	orgs, _, _ := sharedClient().Organizations.List(ctx, "", nil)
+func (ds *Datasource) RefreshData() {
+	ds.writeStatus("fetching orgs...")
+
+	orgs, err := GetAllOrgs()
+	if err != nil {
+		ds.writeErrorStatus(err)
+		return
+	}
+	ds.writeStatus("gotem ")
 
 	for i := range orgs {
 		if orgs[i].Login != nil {
 			orgName := *orgs[i].Login
-			if listContains(orgBlacklist, orgName) {
+			if listContains(ds.orgBlacklist, orgName) {
 				continue
 			}
-			if len(orgWhitelist) == 0 || listContains(orgWhitelist, orgName) {
-				d.writeStatus(fmt.Sprintf("%s fetching repos...", orgName))
+			ds.writeStatus(fmt.Sprintf("owl %s %s <<-", ds.orgWhitelist, ds.myUsername))
+			// if the whitelist is empty or this oprg is whitelisted
+			if len(ds.orgWhitelist) == 0 || listContains(ds.orgWhitelist, orgName) {
 
-				repos, _ := GetAllReposForOrg(orgName)
+				ds.writeStatus(fmt.Sprintf("%s fetching repos...", orgName))
+
+				repos, err := GetAllReposForOrg(orgName)
+				if err != nil {
+					ds.writeErrorStatus(err)
+					return
+				}
 				for _, repo := range repos {
 					repoName := *repo.Name
-					d.writeStatus(fmt.Sprintf("%s/%s fetching prs...", orgName, repoName))
-					prs, _, err := sharedClient().PullRequests.List(ctx, orgName, repoName, nil)
-					d.OnUpdatedPulls(orgName, repoName, prs)
+					ds.writeStatus(fmt.Sprintf("%s/%s fetching prs...", orgName, repoName))
 
+					prs, err := GetAllPullsForRepoInOrg(orgName, repoName)
 					if err != nil {
-						fmt.Printf("%s", err)
-						d.writeStatus(fmt.Sprintf("ERR: %s", err))
+						ds.writeErrorStatus(err)
+						return
+					}
+
+					for _, ghpr := range prs {
+						newPR, err := ds.BuildPullRequest(orgName, repoName, ghpr)
+						if err != nil {
+							ds.writeErrorStatus(err)
+							continue
+						}
+						ds.prUpdateChan <- newPR
 					}
 				}
 			}
 		}
 	}
-	d.writeStatus("update complete")
+	//ds.writeStatus("update complete")
 }

@@ -41,7 +41,8 @@ type model struct {
 	statusChan    chan string
 	statusMessage string
 
-	ds *datasource.Datasource
+	ds           *datasource.Datasource
+	prUpdateChan chan *datasource.PullRequest
 }
 
 var initialModel = model{
@@ -62,17 +63,19 @@ var initialModel = model{
 	statusChan:    make(chan string),
 	statusMessage: "",
 
-	ds: datasource.New(),
+	prUpdateChan: make(chan *datasource.PullRequest),
 }
 
 func (m *model) Init() tea.Cmd {
+	m.ds = datasource.New()
 	m.ds.SetStatusChan(m.statusChan)
+	m.ds.SetPRUpdateChan(m.prUpdateChan)
+
+	go m.listenForStatusChanges()
+	go m.listenForPRChanges()
+	go m.ds.RefreshData()
 
 	m.statusMessage = "init..."
-
-	go m.ds.RefreshData()
-	go m.listenForStatusChanges(m.statusChan)
-
 	return tick()
 }
 
@@ -91,6 +94,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// These keys should exit the program.
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
+		case "r":
+			m.refreshData()
+			m.prView.Clear()
+
+		case "s":
+			m.prView.OnSort()
 
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
@@ -123,16 +133,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) sendSelectToActiveTab() {
 	switch m.cursor.X {
 	case 0:
-		//pulls, _ := datasource.GetAllPulls("hellodigit", "digit-libs")
 		m.prView.OnSelect(m.cursor)
 	}
 }
 
-func (m *model) View() string {
-	// todo moe to async update handler
-	pulls, _ := datasource.GetAllPulls()
-	m.prView.OnPullsUpdate(pulls)
+func (m *model) refreshData() {
+	go m.ds.RefreshData()
+}
 
+func (m *model) View() string {
 	width, height, _ := term.GetSize(int(os.Stdout.Fd()))
 
 	navHeight := 3
@@ -155,9 +164,16 @@ func (m *model) View() string {
 	return renderedPage.String()
 }
 
-func (m *model) listenForStatusChanges(c chan string) {
+func (m *model) listenForStatusChanges() {
 	for {
-		m.statusMessage = <-c
+		m.statusMessage = <-m.statusChan
+	}
+}
+
+func (m *model) listenForPRChanges() {
+	for {
+		newPR := <-m.prUpdateChan
+		m.prView.OnNewPullData(newPR)
 	}
 }
 
@@ -167,7 +183,6 @@ func Execute() {
 		fmt.Println("Error loading .env file")
 	}
 
-	//datasource.GithubGet()
 	/*
 		abandonAgeDays := os.Getenv("ABANDONED_AGE_DAYS")
 		if days, err := strconv.Atoi(abandonAgeDays); err == nil {
@@ -175,7 +190,7 @@ func Execute() {
 			then := time.Now().Add(time.Duration(30) * time.Hour * time.Duration(24))
 			fmt.Printf("then %s\n", then)
 
-			abd := time.Now().After(pr.LastCommitTime.Add(time.Duration(days) * time.Hour * time.Duration(24)))
+			//abd := time.Now().After(pr.LastCommitTime.Add(time.Duration(days) * time.Hour * time.Duration(24)))
 		}
 	*/
 

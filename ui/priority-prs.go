@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,19 +28,46 @@ Got data
 type PriorityPRs struct {
 	pulls []*datasource.PullRequest
 
+	needsSort                  bool
 	currentlySelectedPullIndex int
 	cursor                     CursorPos
 
 	statusChan chan<- string
 }
 
-func (p *PriorityPRs) OnPullsUpdate(pulls []*datasource.PullRequest) {
-	p.pulls = pulls
+type byImportance []*datasource.PullRequest
+
+func (s byImportance) Len() int {
+	return len(s)
+}
+func (s byImportance) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byImportance) Less(i, j int) bool {
+	return s[i].Importance > s[j].Importance
+}
+
+func (p *PriorityPRs) OnNewPullData(pr *datasource.PullRequest) {
+	p.pulls = append(p.pulls, pr)
+	p.needsSort = true
+}
+
+func (p *PriorityPRs) OnSort() {
+	sort.Sort(byImportance(p.pulls))
+	p.needsSort = false
 }
 
 func (p *PriorityPRs) OnSelect(cursor CursorPos) {
 	pull := p.pulls[p.currentlySelectedPullIndex]
+
+	now := time.Now()
+	pull.ViewedAt = &now
+
 	openbrowser(*pull.PR.HTMLURL)
+}
+
+func (p *PriorityPRs) Clear() {
+	p.pulls = []*datasource.PullRequest{}
 }
 
 func (p *PriorityPRs) OnCursorMove(moxedX int, movedY int) bool {
@@ -115,10 +143,17 @@ func (p *PriorityPRs) BuildPRFooter(viewWidth int, pr *datasource.PullRequest) s
 		statusKey = statusApprovedStyle.Render("APPROVED")
 	} else if pr.IsAbandoned {
 		statusKey = statusStyle.Render("ABANDONED 💀")
+	} else if pr.IsDraft {
+		statusKey = statusStyle.Render("DRAFT")
 	} else if pr.HasChangesAfterLastComment {
 		statusKey = statusAlertStyle.Render("NEEDS REVIEW")
 	} else {
 		statusKey = statusStyle.Render("OK")
+	}
+
+	viewedIcon := ""
+	if pr.ViewedAt != nil {
+		viewedIcon = " ✅ "
 	}
 
 	orgTag := orgStatusTagStyle.Render(fmt.Sprintf("%s/%s", pr.OrgName, pr.RepoName))
@@ -127,13 +162,17 @@ func (p *PriorityPRs) BuildPRFooter(viewWidth int, pr *datasource.PullRequest) s
 	author := fishCakeStyle.Render(pr.Author)
 
 	// TODO : properly calculate the width after padding applied
-	commitsCount := statusTextStyle.Copy().
-		Width(viewWidth - 2 - w(statusKey) - w(totalWait) - w(author) - w(orgTag)).
-		Render(fmt.Sprintf("Commits: %d", pr.NumCommits))
+	commitsCount := statusTextStyle.Copy().Render(fmt.Sprintf("Commits: %d", pr.NumCommits))
+	//Width(viewWidth - 2 - w(viewedIcon) - w(statusKey) - w(totalWait) - w(author) - w(orgTag)).
+
+	viewStatus := statusTextStyle.Copy().
+		Width(viewWidth - 2 - w(statusKey) - w(commitsCount) - w(orgTag) - w(totalWait) - w(author)).
+		Render(viewedIcon)
 
 	bar := lipgloss.JoinHorizontal(lipgloss.Top,
 		statusKey,
 		commitsCount,
+		viewStatus,
 		orgTag,
 		totalWait,
 		author,
@@ -147,33 +186,23 @@ func (p *PriorityPRs) BuildPRFooter(viewWidth int, pr *datasource.PullRequest) s
 func (p *PriorityPRs) BuildView(viewWidth int, viewHeight int) string {
 	doc := strings.Builder{}
 	headerHeight := 7
-	pullPosHeight := 0
+	pullPosHeight := 1
 	bodyHeight := viewHeight - headerHeight - pullPosHeight
 
 	doc.WriteString(p.BuildTabHeader(viewWidth, headerHeight))
 
-	/*
-		if len(p.pulls) == 0 {
-			doc.WriteString(lipgloss.NewStyle().
-				Align(lipgloss.Left).
-				Background(subtle).
-				Padding(0, 1).
-				Width(viewWidth).
-				MaxHeight(pullPosHeight).
-				Render("Loading...\n"))
-			return doc.String()
-		}
-	*/
-
-	doc.WriteString(pullPositionStyle.Copy().Width(viewWidth).Render(fmt.Sprintf("%d of %d", p.currentlySelectedPullIndex+1, len(p.pulls))) + "\n")
+	msg := strings.Builder{}
+	if p.needsSort {
+		msg.WriteString("NEEDS (S)ORT  ")
+	}
+	msg.WriteString(fmt.Sprintf("%d of %d", p.currentlySelectedPullIndex+1, len(p.pulls)))
+	doc.WriteString(pullPositionStyle.Copy().Width(viewWidth).Render(msg.String()) + "\n")
 
 	prSection := strings.Builder{}
-
 	viewablePulls := p.pulls[p.currentlySelectedPullIndex:len(p.pulls)]
-
 	for i := range viewablePulls {
 		pr := viewablePulls[i]
-		// PR Block
+
 		if i == 0 {
 			prSection.WriteString(
 				pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", *pr.PR.Title)))
@@ -182,14 +211,6 @@ func (p *PriorityPRs) BuildView(viewWidth int, viewHeight int) string {
 				pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
 		}
 
-		/*
-			prSection.WriteString(fmt.Sprintf("\n %s \n %s\n %s\n %d \n %d \n",
-				pr.LastCommitTime,
-				pr.LastCommitTime.Add(time.Duration(21)*time.Hour*time.Duration(24)),
-				time.Now(),
-				time.Now().After(pr.LastCommitTime.Add(time.Duration(21)*time.Hour*time.Duration(24))),
-				pr.IsAbandoned))
-		*/
 		prSection.WriteString(p.BuildPRDetailBody(viewWidth, pr))
 		prSection.WriteString(p.BuildPRFooter(viewWidth, pr))
 		prSection.WriteString("\n")
@@ -200,36 +221,6 @@ func (p *PriorityPRs) BuildView(viewWidth int, viewHeight int) string {
 		MaxHeight(bodyHeight).
 		MaxWidth(viewWidth).
 		Render(prSection.String()))
-
-	/*
-		prSection := strings.Builder{}
-		for i := range pulls {
-			p := pulls[i]
-			// PR Block
-			prSection.WriteString(pullListStyle.Copy().Width(viewWidth).Render(*p.Title) + "\n\n")
-
-			//out, _ := glamour.Render(*p.Body, "dark")
-			//prSection.WriteString(out + "\n")
-			//prSection.WriteString("\n\n") // spacer after each
-
-			//desc := stringWrap(stripNewLines(out), viewWidth)
-			//doc.WriteString(pullStyle.Copy().Inherit(titleStyle).Width(viewWidth).Render(desc + "\n"))
-
-			//doc.WriteString(pullStyle.Copy().Inherit(titleStyle).Width(viewWidth).Render(fmt.Sprintf("%.200s", str)) + "\n")
-
-			//doc.WriteString(pullStyle.Copy().Width(viewWidth).
-			//	Align(lipgloss.Left).Inherit(titleStyle).Render(*p.Title))
-
-			//doc.WriteString(pullStyle.Copy().Width(viewWidth).
-			//	Align(lipgloss.Left).Inherit(descStyle).Render(fmt.Sprintf("%.100s", *p.Body)))
-			// spacer
-		}
-		doc.WriteString(lipgloss.NewStyle().Height(bodyHeight).Render(prSection.String()))
-		doc.WriteString("\n\n")
-	*/
-
-	//doc.WriteString(lipgloss.NewStyle().Background(subtle).Height(bodyHeight).
-	//	Render(fmt.Sprintf("viewHeight %d bodyHeight %d \n", viewHeight, bodyHeight)))
 
 	return lipgloss.NewStyle().MaxWidth(viewWidth).Render(doc.String()) + "\n"
 }
