@@ -21,14 +21,13 @@ func (p *ActivePRs) OnNewPullData(pr *datasource.PullRequest) {
 	}
 	hoursSinceActivity := int(time.Now().Sub(mostRecentActivityTime) / time.Hour)
 
-	if hoursSinceActivity < activeWindow {
+	if !pr.IsApproved && hoursSinceActivity < activeWindow {
 		p.pulls = append(p.pulls, pr)
 		p.needsSort = true
 	}
 }
 
 func (p *ActivePRs) OnSort() {
-	print("ActivePRs OnSort")
 	sort.Sort(byImportance(p.pulls))
 	p.needsSort = false
 }

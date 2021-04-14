@@ -33,7 +33,6 @@ func (p *PriorityPRs) OnNewPullData(pr *datasource.PullRequest) {
 }
 
 func (p *PriorityPRs) OnSort() {
-	print("PriorityPRs OnSort")
 	sort.Sort(byImportance(p.pulls))
 	p.needsSort = false
 }

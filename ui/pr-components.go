@@ -75,8 +75,10 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 	if p.NeedsSort() {
 		msg.WriteString("NEEDS (S)ORT  ")
 	}
-	msg.WriteString(fmt.Sprintf("%d of %d", selectedIndex+1, len(pulls)))
-	doc.WriteString(pullPositionStyle.Copy().Width(viewWidth).Render(msg.String()) + "\n")
+	if len(pulls) > 0 {
+		msg.WriteString(fmt.Sprintf("%d of %d", selectedIndex+1, len(pulls)))
+		doc.WriteString(pullPositionStyle.Copy().Width(viewWidth).Render(msg.String()) + "\n")
+	}
 
 	prSection := strings.Builder{}
 
@@ -91,7 +93,7 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 			prSection.WriteString(
 				pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
 		}
-
+		prSection.WriteString("\n")
 		prSection.WriteString(BuildPRFooter(p, viewWidth, pr))
 		prSection.WriteString("\n")
 	}

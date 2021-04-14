@@ -20,7 +20,6 @@ func (p *TeamPrs) OnNewPullData(pr *datasource.PullRequest) {
 }
 
 func (p *TeamPrs) OnSort() {
-	print("TeamPrs OnSort")
 	sort.Sort(byImportance(p.pulls))
 	p.needsSort = false
 }
