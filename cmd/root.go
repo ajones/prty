@@ -9,7 +9,6 @@ import (
 	//"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/joho/godotenv"
 	"golang.org/x/term"
 
@@ -35,11 +34,13 @@ type model struct {
 
 	cursor ui.CursorPos
 
-	nav    *ui.TabNav
-	prView *ui.PriorityPRs
+	nav *ui.TabNav
 
-	statusChan    chan string
-	statusMessage string
+	views []ui.PRViewData
+
+	statusChan            chan string
+	statusMessage         string
+	remainingRequestsChan chan string
 
 	ds           *datasource.Datasource
 	prUpdateChan chan *datasource.PullRequest
@@ -55,13 +56,18 @@ var initialModel = model{
 	selected: make(map[int]struct{}),
 
 	selectedTabIndex: 0,
-	tabNames:         []string{"Needs Attention", "Team", "Open", "All"},
+	tabNames:         []string{"Needs Attention", "Team", "Active", "All"},
 
-	nav:    &ui.TabNav{},
-	prView: &ui.PriorityPRs{},
+	nav: &ui.TabNav{},
+	views: []ui.PRViewData{
+		&ui.PriorityPRs{},
+		&ui.TeamPrs{},
+		&ui.ActivePRs{},
+	},
 
-	statusChan:    make(chan string),
-	statusMessage: "",
+	statusChan:            make(chan string),
+	statusMessage:         "",
+	remainingRequestsChan: make(chan string),
 
 	prUpdateChan: make(chan *datasource.PullRequest),
 }
@@ -69,6 +75,7 @@ var initialModel = model{
 func (m *model) Init() tea.Cmd {
 	m.ds = datasource.New()
 	m.ds.SetStatusChan(m.statusChan)
+	m.ds.SetRemainingRequestsChan(m.remainingRequestsChan)
 	m.ds.SetPRUpdateChan(m.prUpdateChan)
 
 	go m.listenForStatusChanges()
@@ -97,26 +104,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "r":
 			m.refreshData()
-			m.prView.Clear()
+			v := m.views[m.cursor.X]
+			v.Clear()
 
 		case "s":
-			m.prView.OnSort()
+			v := m.views[m.cursor.X]
+			println(fmt.Sprintf("%d %v", m.cursor.X, v))
+			v.OnSort()
 
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
-			m.prView.OnCursorMove(0, -1)
+			v := m.views[m.cursor.X]
+			v.OnCursorMove(0, -1)
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
-			m.prView.OnCursorMove(0, 1)
+			v := m.views[m.cursor.X]
+			v.OnCursorMove(0, 1)
 
 		case "left":
 			m.cursor.Y = 0
 			m.cursor.X--
+			if m.cursor.X < 0 {
+				m.cursor.X = 0
+			}
 
 		case "right":
 			m.cursor.Y = 0
 			m.cursor.X++
+			if m.cursor.X >= len(m.views) {
+				m.cursor.X = len(m.views) - 1
+			}
 
 		// The "enter" key and the spacebar (a literal space) toggle
 		// the selected state for the item that the cursor is pointing at.
@@ -131,10 +149,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) sendSelectToActiveTab() {
-	switch m.cursor.X {
-	case 0:
-		m.prView.OnSelect(m.cursor)
-	}
+	v := m.views[m.cursor.X]
+	v.OnSelect(m.cursor)
 }
 
 func (m *model) refreshData() {
@@ -152,12 +168,8 @@ func (m *model) View() string {
 
 	renderedPage.WriteString(m.nav.BuildView(width, navHeight, m.tabNames, m.cursor.X))
 
-	switch m.cursor.X {
-	case 0:
-		renderedPage.WriteString(m.prView.BuildView(width, bodyHeight))
-	default:
-		renderedPage.WriteString(lipgloss.NewStyle().Height(bodyHeight).Render("\n"))
-	}
+	v := m.views[m.cursor.X]
+	renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
 
 	footer := ui.Footer{}
 	renderedPage.WriteString(footer.BuildView(width, footerHeight, m.statusMessage))
@@ -173,7 +185,9 @@ func (m *model) listenForStatusChanges() {
 func (m *model) listenForPRChanges() {
 	for {
 		newPR := <-m.prUpdateChan
-		m.prView.OnNewPullData(newPR)
+		for _, v := range m.views {
+			v.OnNewPullData(newPR)
+		}
 	}
 }
 
@@ -182,17 +196,6 @@ func Execute() {
 	if err != nil {
 		fmt.Println("Error loading .env file")
 	}
-
-	/*
-		abandonAgeDays := os.Getenv("ABANDONED_AGE_DAYS")
-		if days, err := strconv.Atoi(abandonAgeDays); err == nil {
-			fmt.Printf("%d\n", days)
-			then := time.Now().Add(time.Duration(30) * time.Hour * time.Duration(24))
-			fmt.Printf("then %s\n", then)
-
-			//abd := time.Now().After(pr.LastCommitTime.Add(time.Duration(days) * time.Hour * time.Duration(24)))
-		}
-	*/
 
 	p := tea.NewProgram(&initialModel)
 	// Use the full size of the terminal in its "alternate screen buffer"

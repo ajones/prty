@@ -24,6 +24,8 @@ type PullRequest struct {
 	RequestedReviewers []string
 	NumCommits         int
 
+	IAmAuthor                  bool
+	AuthorIsTeammate           bool
 	HasChangesAfterLastComment bool
 	LastCommentTime            time.Time
 	LastCommitTime             time.Time
@@ -36,12 +38,20 @@ type PullRequest struct {
 	ViewedAt *time.Time
 }
 
-func (pr *PullRequest) calculateStatusFields(orgName string) {
+func (pr *PullRequest) calculateStatusFields(orgName string, d *Datasource) {
 	pr.Author = *pr.PR.User.Login
 	pr.OrgName = orgName
 	pr.RepoName = *pr.PR.Head.Repo.Name
 	pr.NumCommits = len(pr.Commits)
 	pr.IsDraft = *pr.PR.Draft
+	pr.IAmAuthor = (pr.Author == d.myUsername)
+
+	for _, n := range d.myTeamUsernames {
+		if n == pr.Author {
+			pr.AuthorIsTeammate = true
+			break
+		}
+	}
 
 	for i, c := range pr.Comments {
 		if i == 0 || pr.LastCommentTime.Before(*c.CreatedAt) {
@@ -85,33 +95,33 @@ func (pr *PullRequest) calculateStatusFields(orgName string) {
 	}
 }
 
-func (d *Datasource) calculateImportance(pr *PullRequest) float64 {
+func (pr *PullRequest) calculateImportance(d *Datasource) {
 	importance := 0.0
+
+	// TODO: add importance if i am CODEOWNER
 
 	// if I am not the author and it is approved we dont need to look at it
 	if pr.Author != d.myUsername && pr.IsApproved {
-		return importance
+		return
 	}
 	// if this pr is abandoned then drop it to the bottom
 	if pr.IsAbandoned {
-		return importance
+		return
 	}
 	// if this pr is a draft push to the bottom
 	if pr.IsDraft {
-		return 1
+		pr.Importance = 1
+		return
 	}
 
 	// 1. if I am NOT the author add 50
-	if pr.Author != d.myUsername {
+	if !pr.IAmAuthor {
 		importance += 50
 	}
 
 	// 2. if author is teammate add 50
-	for _, n := range d.myTeamUsernames {
-		if n == pr.Author {
-			importance += 50
-			break
-		}
+	if pr.AuthorIsTeammate {
+		importance += 50
 	}
 
 	// 3. if I am NOT the author (100-POW(NUM_REQUESTED_REVIEWERS,2))
@@ -141,7 +151,7 @@ func (d *Datasource) calculateImportance(pr *PullRequest) float64 {
 		importance += float64(prAgeMin)
 	}
 
-	return importance
+	pr.Importance = importance
 }
 
 func (d *Datasource) BuildPullRequest(org string, repo string, ghpr *github.PullRequest) (*PullRequest, error) {
@@ -170,8 +180,8 @@ func (d *Datasource) BuildPullRequest(org string, repo string, ghpr *github.Pull
 		Comments: comments,
 		Reviews:  reviews,
 	}
-	newPR.calculateStatusFields(org)
-	newPR.Importance = d.calculateImportance(newPR)
+	newPR.calculateStatusFields(org, d)
+	newPR.calculateImportance(d)
 
 	return newPR, nil
 }
@@ -185,13 +195,19 @@ func GetAllPullsForRepoInOrg(orgName string, repoName string) ([]*github.PullReq
 	// get all pages of results
 	var allPulls []*github.PullRequest
 	for {
+		println(fmt.Sprintf("pulls: %s/%s p:%d", orgName, repoName, opt.Page))
 		prs, resp, err := sharedClient().PullRequests.List(ctx, orgName, repoName, opt)
+		if _, ok := err.(*github.RateLimitError); ok {
+			println("pulls: hit rate limit")
+			time.Sleep(time.Duration(5) * time.Second)
+			continue
+		}
 		if err != nil {
-			fmt.Printf("%s", err)
+			println(fmt.Sprintf("pulls: error %s", err))
 			return allPulls, err
 		}
 		allPulls = append(allPulls, prs...)
-		if resp.NextPage == 0 {
+		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -205,13 +221,19 @@ func GetAllCommitsForPull(org string, repo string, prNumber int) ([]*github.Repo
 	// get all pages of results
 	var allCommits []*github.RepositoryCommit
 	for {
+		println(fmt.Sprintf("commits: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		commits, resp, err := sharedClient().PullRequests.ListCommits(ctx, org, repo, prNumber, opt)
+		if _, ok := err.(*github.RateLimitError); ok {
+			println("commits: hit rate limit")
+			time.Sleep(time.Duration(5) * time.Second)
+			continue
+		}
 		if err != nil {
-			fmt.Printf("%s", err)
+			println(fmt.Sprintf("commits: error %s", err))
 			return allCommits, err
 		}
 		allCommits = append(allCommits, commits...)
-		if resp.NextPage == 0 {
+		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -227,13 +249,19 @@ func GetAllCommentsForPull(org string, repo string, prNumber int) ([]*github.Pul
 	// get all pages of results
 	var allComments []*github.PullRequestComment
 	for {
+		println(fmt.Sprintf("comments: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		comments, resp, err := sharedClient().PullRequests.ListComments(ctx, org, repo, prNumber, opt)
+		if _, ok := err.(*github.RateLimitError); ok {
+			println("comments: hit rate limit")
+			time.Sleep(time.Duration(5) * time.Second)
+			continue
+		}
 		if err != nil {
-			fmt.Printf("%s", err)
+			println(fmt.Sprintf("comments: error %s", err))
 			return allComments, err
 		}
 		allComments = append(allComments, comments...)
-		if resp.NextPage == 0 {
+		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -250,13 +278,20 @@ func GetAllReviewsForPull(org string, repo string, prNumber int) ([]*github.Pull
 	// get all pages of results
 	var allReviews []*github.PullRequestReview
 	for {
+		println(fmt.Sprintf("reviews: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		reviews, resp, err := sharedClient().PullRequests.ListReviews(ctx, org, repo, prNumber, nil)
+		if _, ok := err.(*github.RateLimitError); ok {
+			println("reviews: hit rate limit")
+			time.Sleep(time.Duration(5) * time.Second)
+			continue
+		}
 		if err != nil {
-			fmt.Printf("%s", err)
+			println(fmt.Sprintf("reviews: error %s", err))
 			return allReviews, err
 		}
+		println(fmt.Sprintf("reviews: resp %+v", resp))
 		allReviews = append(allReviews, reviews...)
-		if resp.NextPage == 0 {
+		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage

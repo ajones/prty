@@ -11,8 +11,9 @@ import (
 )
 
 type Datasource struct {
-	statusChan   chan<- string
-	prUpdateChan chan<- *PullRequest
+	statusChan            chan<- string
+	prUpdateChan          chan<- *PullRequest
+	remainingRequestsChan chan<- string
 
 	myUsername      string
 	myTeamUsernames []string
@@ -60,6 +61,10 @@ func (ds *Datasource) SetStatusChan(statusChan chan<- string) {
 	ds.statusChan = statusChan
 }
 
+func (ds *Datasource) SetRemainingRequestsChan(remainingRequestsChan chan<- string) {
+	ds.remainingRequestsChan = remainingRequestsChan
+}
+
 func (ds *Datasource) SetPRUpdateChan(prUpdateChan chan<- *PullRequest) {
 	ds.prUpdateChan = prUpdateChan
 }
@@ -80,24 +85,25 @@ func (ds *Datasource) RefreshData() {
 			if listContains(ds.orgBlacklist, orgName) {
 				continue
 			}
-			ds.writeStatus(fmt.Sprintf("owl %s %s <<-", ds.orgWhitelist, ds.myUsername))
 			// if the whitelist is empty or this oprg is whitelisted
 			if len(ds.orgWhitelist) == 0 || listContains(ds.orgWhitelist, orgName) {
 
 				ds.writeStatus(fmt.Sprintf("%s fetching repos...", orgName))
-
 				repos, err := GetAllReposForOrg(orgName)
 				if err != nil {
 					ds.writeErrorStatus(err)
+					println(fmt.Sprintf("%s\n", err))
 					return
 				}
+
 				for _, repo := range repos {
 					repoName := *repo.Name
-					ds.writeStatus(fmt.Sprintf("%s/%s fetching prs...", orgName, repoName))
 
+					ds.writeStatus(fmt.Sprintf("%s/%s fetching prs...", orgName, repoName))
 					prs, err := GetAllPullsForRepoInOrg(orgName, repoName)
 					if err != nil {
 						ds.writeErrorStatus(err)
+						println(fmt.Sprintf("%s\n", err))
 						return
 					}
 
@@ -105,6 +111,7 @@ func (ds *Datasource) RefreshData() {
 						newPR, err := ds.BuildPullRequest(orgName, repoName, ghpr)
 						if err != nil {
 							ds.writeErrorStatus(err)
+							println(fmt.Sprintf("%s\n", err))
 							continue
 						}
 						ds.prUpdateChan <- newPR
@@ -113,5 +120,5 @@ func (ds *Datasource) RefreshData() {
 			}
 		}
 	}
-	//ds.writeStatus("update complete")
+	ds.writeStatus("update complete")
 }

@@ -8,7 +8,21 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/inburst/prty/datasource"
 )
+
+type byImportance []*datasource.PullRequest
+
+func (s byImportance) Len() int {
+	return len(s)
+}
+func (s byImportance) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byImportance) Less(i, j int) bool {
+	return s[i].Importance > s[j].Importance
+}
 
 func replaceLinks(str string) string {
 	var re = regexp.MustCompile(`\[.*\](.*)`)
@@ -76,7 +90,7 @@ func formatDurationDayHour(d time.Duration) string {
 
 	days := d / (time.Hour * 24)
 	hours := (d - (days * (time.Hour * 24))) / time.Hour
-	return fmt.Sprintf("%02dd:%02d", days, hours)
+	return fmt.Sprintf("%dd:%02d", days, hours)
 }
 
 func min(a, b int) int {

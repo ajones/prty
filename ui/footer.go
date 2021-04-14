@@ -13,10 +13,10 @@ func (f *Footer) BuildView(viewWidth int, viewHeight int, statusMsg string) stri
 
 	w := lipgloss.Width
 
-	statusKey := statusStyle.Render("STATUS")
-	encoding := encodingStyle.Render("GSD")
-	fishCake := fishCakeStyle.Render("PRTY ⏱")
-	statusVal := statusTextStyle.Copy().
+	statusKey := tagStyle.Copy().Render("STATUS:")
+	encoding := tagSuccessStyle.Copy().Render("GSD")
+	fishCake := tagSpecialStyle.Copy().Align(lipgloss.Right).Render("PRTY ⏱")
+	statusVal := lipgloss.NewStyle().
 		Width(viewWidth - w(statusKey) - w(encoding) - w(fishCake)).
 		Render(statusMsg)
 
@@ -27,7 +27,7 @@ func (f *Footer) BuildView(viewWidth int, viewHeight int, statusMsg string) stri
 		fishCake,
 	)
 
-	doc.WriteString(statusBarStyle.Width(viewWidth).Render(bar))
+	doc.WriteString(lipgloss.NewStyle().Width(viewWidth).Render(bar))
 
 	return lipgloss.NewStyle().Height(viewHeight).Render(doc.String())
 }

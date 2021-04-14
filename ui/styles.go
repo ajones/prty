@@ -9,6 +9,17 @@ var (
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 
+	pink      = lipgloss.Color("#FFACFC")
+	fusia     = lipgloss.Color("#F148FB")
+	blue      = lipgloss.Color("#7122FA")
+	purple    = lipgloss.Color("#560A86")
+	green     = lipgloss.Color("#80ED99")
+	red       = lipgloss.Color("#FF5F87")
+	white     = lipgloss.Color("#FAFAFA")
+	black     = lipgloss.Color("#000000")
+	lightGrey = lipgloss.Color("#383838")
+	darkGrey  = lipgloss.Color("#282828")
+
 	divider = lipgloss.NewStyle().
 		SetString("•").
 		Padding(0, 1).
@@ -69,29 +80,6 @@ var (
 			BorderTop(true).
 			BorderForeground(subtle)
 
-	// Dialog.
-
-	dialogBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#874BFD")).
-			Padding(1, 0).
-			BorderTop(true).
-			BorderLeft(true).
-			BorderRight(true).
-			BorderBottom(true)
-
-	buttonStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFF7DB")).
-			Background(lipgloss.Color("#888B7E")).
-			Padding(0, 3).
-			MarginTop(1)
-
-	activeButtonStyle = buttonStyle.Copy().
-				Foreground(lipgloss.Color("#FFF7DB")).
-				Background(lipgloss.Color("#F25D94")).
-				MarginRight(2).
-				Underline(true)
-
 	// List.
 
 	list = lipgloss.NewStyle().
@@ -121,64 +109,64 @@ var (
 			Foreground(lipgloss.AdaptiveColor{Light: "#969B86", Dark: "#696969"}).
 			Render(s)
 	}
+
 	// Status Bar.
 
 	statusNugget = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFDF5")).
 			Padding(0, 1)
 
-	statusBarStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#343433", Dark: "#C1C6B2"}).
-			Background(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#353533"})
+	// Pull Request
+	prStyle = lipgloss.NewStyle().
+		Background(lightGrey)
 
-	statusStyle = lipgloss.NewStyle().
-			Inherit(statusBarStyle).
+	prTagStyle = prStyle.Copy().
+			Background(darkGrey).
+			Width(20).
+			Padding(0, 1)
+
+	prTagLeftStyle = prTagStyle.Copy().
+			Inherit(prTagStyle).
+			Padding(0, 1)
+
+	prTagRightStyle = prTagStyle.Copy().
+			Inherit(prTagStyle).
 			Padding(0, 1).
-			MarginRight(1)
-
-	statusAlertStyle = statusStyle.Copy().
-				Foreground(lipgloss.Color("#FFFDF5")).
-				Background(lipgloss.Color("#FF5F87"))
-
-	statusApprovedStyle = statusStyle.Copy().
-				Foreground(lipgloss.Color("#3D518C")).
-				Background(lipgloss.Color("#80ED99"))
-
-	orgStatusTagStyle = statusNugget.Copy().
-				Foreground(lipgloss.Color("#3D518C")).
-				Background(lipgloss.Color("#23F7E5")).
-				Align(lipgloss.Right)
-
-	encodingStyle = statusNugget.Copy().
-			Background(lipgloss.Color("#A550DF")).
 			Align(lipgloss.Right)
 
-	statusTextStyle = lipgloss.NewStyle().Inherit(statusBarStyle)
+	pullPositionStyle = lipgloss.NewStyle().
+				Align(lipgloss.Right).
+				Background(lightGrey).
+				Padding(0, 1)
 
-	fishCakeStyle = statusNugget.Copy().Background(lipgloss.Color("#6124DF"))
+	pullListStyle = lipgloss.NewStyle().
+			Align(lipgloss.Left).
+			Background(lightGrey).
+			Padding(1, 1, 1, 1)
+
+	pullListStyleSelected = pullListStyle.Copy().
+				Padding(1, 1, 1, 1).
+				Foreground(white).
+				Background(purple)
+
+	// Tag
+	tagStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			Align(lipgloss.Center)
+
+	tagAlertStyle = tagStyle.Copy().
+			Foreground(white).
+			Background(red)
+
+	tagSuccessStyle = tagStyle.Copy().
+			Foreground(lightGrey).
+			Background(green)
+
+	tagSpecialStyle = tagStyle.Copy().
+			Foreground(white).
+			Background(purple)
 
 	// Page.
 
 	docStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
-
-	// Pull Request
-	pullPositionStyle = lipgloss.NewStyle().
-				Align(lipgloss.Right).
-				Background(subtle).
-				Padding(0, 1, 0, 0)
-
-	pullListStyle = lipgloss.NewStyle().
-			Align(lipgloss.Left).
-			Background(subtle).
-			Padding(1, 1, 1, 1)
-	pullListStyleSelected = lipgloss.NewStyle().
-				Inherit(pullListStyle).
-				Padding(1, 1, 1, 1).
-				Foreground(lipgloss.Color("#FAFAFA")).
-				Background(highlight)
-
-	//Foreground(lipgloss.Color("#FAFAFA"))
-	//Background(highlight)
-	//Margin(0, 0, 0, 0).
-	//Padding(1, 2, 1, 2)
 )
