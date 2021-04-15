@@ -68,6 +68,14 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 		}
 	}
 	pr.IsAbandoned = time.Now().After(pr.LastCommitTime.Add(time.Duration(21) * time.Hour * time.Duration(24)))
+
+	// clear viewed at if there are new changes
+	if pr.ViewedAt != nil {
+		if pr.LastCommitTime.After(*pr.ViewedAt) || pr.LastCommentTime.After(*pr.ViewedAt) {
+			pr.ViewedAt = nil
+		}
+	}
+
 	/*
 		// TODO : PULL THIS OUT TO NOT BE READ EVERY TIME!!!
 		abandonAgeDays := os.Getenv("ABANDONED_AGE_DAYS")

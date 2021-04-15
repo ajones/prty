@@ -118,8 +118,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "r":
 			m.refreshData()
-			v := m.views[m.cursor.X]
-			v.Clear()
 
 		case "s":
 			v := m.views[m.cursor.X]
