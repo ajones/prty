@@ -12,10 +12,13 @@ import (
 var currentPulls []*PullRequest = []*PullRequest{}
 
 type PullRequest struct {
-	PR       *github.PullRequest
-	Commits  []*github.RepositoryCommit
-	Comments []*github.PullRequestComment
-	Reviews  []*github.PullRequestReview
+	PR               *github.PullRequest
+	Commits          []*github.RepositoryCommit
+	Comments         []*github.PullRequestComment
+	Reviews          []*github.PullRequestReview
+	LastCommitsPage  int
+	LastCommentsPage int
+	LastReviewsPage  int
 
 	Author             string
 	RepoName           string
@@ -38,15 +41,15 @@ type PullRequest struct {
 	ViewedAt *time.Time
 }
 
-func (pr *PullRequest) calculateStatusFields(orgName string, d *Datasource) {
+func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds *Datasource) {
 	pr.Author = *pr.PR.User.Login
 	pr.OrgName = orgName
-	pr.RepoName = *pr.PR.Head.Repo.Name
+	pr.RepoName = repoName
 	pr.NumCommits = len(pr.Commits)
 	pr.IsDraft = *pr.PR.Draft
-	pr.IAmAuthor = (pr.Author == d.myUsername)
+	pr.IAmAuthor = (pr.Author == ds.config.GithubUsername)
 
-	for _, n := range d.myTeamUsernames {
+	for _, n := range ds.config.TeamUsernames {
 		if n == pr.Author {
 			pr.AuthorIsTeammate = true
 			break
@@ -95,13 +98,13 @@ func (pr *PullRequest) calculateStatusFields(orgName string, d *Datasource) {
 	}
 }
 
-func (pr *PullRequest) calculateImportance(d *Datasource) {
+func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	importance := 0.0
 
 	// TODO: add importance if i am CODEOWNER
 
 	// if I am not the author and it is approved we dont need to look at it
-	if pr.Author != d.myUsername && pr.IsApproved {
+	if pr.Author != ds.config.GithubUsername && pr.IsApproved {
 		return
 	}
 	// if this pr is abandoned then drop it to the bottom
@@ -125,7 +128,7 @@ func (pr *PullRequest) calculateImportance(d *Datasource) {
 	}
 
 	// 3. if I am NOT the author (100-POW(NUM_REQUESTED_REVIEWERS,2))
-	if pr.Author != d.myUsername {
+	if pr.Author != ds.config.GithubUsername {
 		revCount := float64(len(pr.RequestedReviewers))
 		importance += (100 - math.Pow(revCount, 2))
 	}
@@ -135,42 +138,115 @@ func (pr *PullRequest) calculateImportance(d *Datasource) {
 	importance += float64(((50 / 7500) * prAgeMin) + 25)
 
 	// 5. min since last commit. if I am NOT the author ((100/7500)*MIN_SINCE_LAST_COMMIT+50)
-	if pr.Author != d.myUsername {
+	if pr.Author != ds.config.GithubUsername {
 		minSinceLastCommit := time.Now().Sub(pr.LastCommitTime) / time.Minute
 		importance += float64((100/7500)*minSinceLastCommit + 50)
 	}
 
 	// 6. min since last comment if I AM the author ((600/7500)*MIN_SINCE_LAST_COMMENT+50)
-	if pr.Author == d.myUsername {
+	if pr.Author == ds.config.GithubUsername {
 		minSinceLastComment := time.Now().Sub(pr.LastCommentTime) / time.Minute
 		importance += float64((100/7500)*minSinceLastComment + 50)
 	}
 
 	// 7. if it is mine and approved we should go look at it
-	if pr.Author == d.myUsername && pr.IsApproved {
+	if pr.Author == ds.config.GithubUsername && pr.IsApproved {
 		importance += float64(prAgeMin)
 	}
 
 	pr.Importance = importance
 }
 
-func (d *Datasource) BuildPullRequest(org string, repo string, ghpr *github.PullRequest) (*PullRequest, error) {
-	d.writeStatus(fmt.Sprintf("%s/%s/#%d fetching commits...", org, repo, *ghpr.Number))
-	commits, err := GetAllCommitsForPull(org, repo, *ghpr.Number)
+func (ds *Datasource) UpdateExistingPr(org string, repo string, pr *PullRequest, ghpr *github.PullRequest) error {
+	pr.PR = ghpr
+
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching commits...", org, repo, *ghpr.Number))
+	commits, lastCommitsPage, err := ds.GetAllCommitsForPull(org, repo, *ghpr.Number, pr.LastCommitsPage)
 	if err != nil {
-		d.writeErrorStatus(err)
+		ds.writeErrorStatus(err)
+		return err
+	}
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching comments...", org, repo, *ghpr.Number))
+	comments, lastCommentsPage, err := ds.GetAllCommentsForPull(org, repo, *ghpr.Number, pr.LastCommentsPage)
+	if err != nil {
+		ds.writeErrorStatus(err)
+		return err
+	}
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching reviews...", org, repo, *ghpr.Number))
+	reviews, lastReviewsPage, err := ds.GetAllReviewsForPull(org, repo, *ghpr.Number, pr.LastReviewsPage)
+	if err != nil {
+		ds.writeErrorStatus(err)
+		return err
+	}
+
+	// ugh...n^2 * 3 .... boooooo
+	// todo : refactor
+	for _, new := range commits {
+		found := false
+		for _, c := range pr.Commits {
+			if c.GetNodeID() == new.GetNodeID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			pr.Commits = append(pr.Commits, new)
+		}
+	}
+
+	for _, new := range comments {
+		found := false
+		for _, c := range pr.Comments {
+			if c.GetNodeID() == new.GetNodeID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			pr.Comments = append(pr.Comments, new)
+		}
+	}
+
+	for _, new := range reviews {
+		found := false
+		for _, c := range pr.Reviews {
+			if c.GetNodeID() == new.GetNodeID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			pr.Reviews = append(pr.Reviews, new)
+		}
+	}
+
+	pr.LastCommitsPage = lastCommitsPage
+	pr.LastCommentsPage = lastCommentsPage
+	pr.LastReviewsPage = lastReviewsPage
+
+	pr.calculateStatusFields(org, repo, ds)
+	pr.calculateImportance(ds)
+
+	return nil
+}
+
+func (ds *Datasource) BuildPullRequest(org string, repo string, ghpr *github.PullRequest) (*PullRequest, error) {
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching commits...", org, repo, *ghpr.Number))
+	commits, lastCommitsPage, err := ds.GetAllCommitsForPull(org, repo, *ghpr.Number, 0)
+	if err != nil {
+		ds.writeErrorStatus(err)
 		return nil, err
 	}
-	d.writeStatus(fmt.Sprintf("%s/%s/#%d fetching comments...", org, repo, *ghpr.Number))
-	comments, err := GetAllCommentsForPull(org, repo, *ghpr.Number)
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching comments...", org, repo, *ghpr.Number))
+	comments, lastCommentsPage, err := ds.GetAllCommentsForPull(org, repo, *ghpr.Number, 0)
 	if err != nil {
-		d.writeErrorStatus(err)
+		ds.writeErrorStatus(err)
 		return nil, err
 	}
-	d.writeStatus(fmt.Sprintf("%s/%s/#%d fetching reviews...", org, repo, *ghpr.Number))
-	reviews, err := GetAllReviewsForPull(org, repo, *ghpr.Number)
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching reviews...", org, repo, *ghpr.Number))
+	reviews, lastReviewsPage, err := ds.GetAllReviewsForPull(org, repo, *ghpr.Number, 0)
 	if err != nil {
-		d.writeErrorStatus(err)
+		ds.writeErrorStatus(err)
 		return nil, err
 	}
 
@@ -179,14 +255,18 @@ func (d *Datasource) BuildPullRequest(org string, repo string, ghpr *github.Pull
 		Commits:  commits,
 		Comments: comments,
 		Reviews:  reviews,
+
+		LastCommitsPage:  lastCommitsPage,
+		LastCommentsPage: lastCommentsPage,
+		LastReviewsPage:  lastReviewsPage,
 	}
-	newPR.calculateStatusFields(org, d)
-	newPR.calculateImportance(d)
+	newPR.calculateStatusFields(org, repo, ds)
+	newPR.calculateImportance(ds)
 
 	return newPR, nil
 }
 
-func GetAllPullsForRepoInOrg(orgName string, repoName string) ([]*github.PullRequest, error) {
+func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) ([]*github.PullRequest, error) {
 	ctx := context.Background()
 	opt := &github.PullRequestListOptions{
 		ListOptions: github.ListOptions{PerPage: 10},
@@ -206,6 +286,7 @@ func GetAllPullsForRepoInOrg(orgName string, repoName string) ([]*github.PullReq
 			println(fmt.Sprintf("pulls: error %s", err))
 			return allPulls, err
 		}
+		ds.remainingRequestsChan <- resp.Rate
 		allPulls = append(allPulls, prs...)
 		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
@@ -215,9 +296,12 @@ func GetAllPullsForRepoInOrg(orgName string, repoName string) ([]*github.PullReq
 	return allPulls, nil
 }
 
-func GetAllCommitsForPull(org string, repo string, prNumber int) ([]*github.RepositoryCommit, error) {
+func (ds *Datasource) GetAllCommitsForPull(org string, repo string, prNumber int, lastPage int) ([]*github.RepositoryCommit, int, error) {
 	ctx := context.Background()
-	opt := &github.ListOptions{PerPage: 10}
+	opt := &github.ListOptions{
+		PerPage: 10,
+		Page:    lastPage,
+	}
 	// get all pages of results
 	var allCommits []*github.RepositoryCommit
 	for {
@@ -230,21 +314,26 @@ func GetAllCommitsForPull(org string, repo string, prNumber int) ([]*github.Repo
 		}
 		if err != nil {
 			println(fmt.Sprintf("commits: error %s", err))
-			return allCommits, err
+			return allCommits, lastPage, err
 		}
+		ds.remainingRequestsChan <- resp.Rate
 		allCommits = append(allCommits, commits...)
 		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
+		lastPage = resp.NextPage
 	}
-	return allCommits, nil
+	return allCommits, lastPage, nil
 }
 
-func GetAllCommentsForPull(org string, repo string, prNumber int) ([]*github.PullRequestComment, error) {
+func (ds *Datasource) GetAllCommentsForPull(org string, repo string, prNumber int, lastPage int) ([]*github.PullRequestComment, int, error) {
 	ctx := context.Background()
 	opt := &github.PullRequestListCommentsOptions{
-		ListOptions: github.ListOptions{PerPage: 10},
+		ListOptions: github.ListOptions{
+			PerPage: 10,
+			Page:    lastPage,
+		},
 	}
 	// get all pages of results
 	var allComments []*github.PullRequestComment
@@ -258,22 +347,27 @@ func GetAllCommentsForPull(org string, repo string, prNumber int) ([]*github.Pul
 		}
 		if err != nil {
 			println(fmt.Sprintf("comments: error %s", err))
-			return allComments, err
+			return allComments, lastPage, err
 		}
+		ds.remainingRequestsChan <- resp.Rate
 		allComments = append(allComments, comments...)
 		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
+		lastPage = resp.NextPage
 	}
-	return allComments, nil
+	return allComments, lastPage, nil
 }
 
-func GetAllReviewsForPull(org string, repo string, prNumber int) ([]*github.PullRequestReview, error) {
+func (ds *Datasource) GetAllReviewsForPull(org string, repo string, prNumber int, lastPage int) ([]*github.PullRequestReview, int, error) {
 	ctx := context.Background()
 	opt := &github.RepositoryListByOrgOptions{
-		ListOptions: github.ListOptions{PerPage: 10},
-		Type:        "all",
+		ListOptions: github.ListOptions{
+			PerPage: 10,
+			Page:    lastPage,
+		},
+		Type: "all",
 	}
 	// get all pages of results
 	var allReviews []*github.PullRequestReview
@@ -287,14 +381,14 @@ func GetAllReviewsForPull(org string, repo string, prNumber int) ([]*github.Pull
 		}
 		if err != nil {
 			println(fmt.Sprintf("reviews: error %s", err))
-			return allReviews, err
+			return allReviews, lastPage, err
 		}
-		println(fmt.Sprintf("reviews: resp %+v", resp))
 		allReviews = append(allReviews, reviews...)
 		if resp.NextPage == 0 || opt.Page == resp.NextPage {
 			break
 		}
 		opt.Page = resp.NextPage
+		lastPage = resp.NextPage
 	}
-	return allReviews, nil
+	return allReviews, lastPage, nil
 }

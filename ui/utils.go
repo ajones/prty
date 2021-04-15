@@ -79,10 +79,8 @@ func formatDuration(d time.Duration) string {
 }
 
 func formatDurationToMin(d time.Duration) string {
-	d = d.Round(time.Minute)
-	h := d / time.Hour
-	d -= h * time.Hour
-	return fmt.Sprintf("%02d", h)
+	d = d.Round(time.Minute) / time.Minute
+	return fmt.Sprintf("%02d", d)
 }
 
 func formatDurationDayHour(d time.Duration) string {

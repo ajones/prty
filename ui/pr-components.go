@@ -78,6 +78,8 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 	if len(pulls) > 0 {
 		msg.WriteString(fmt.Sprintf("%d of %d", selectedIndex+1, len(pulls)))
 		doc.WriteString(pullPositionStyle.Copy().Width(viewWidth).Render(msg.String()) + "\n")
+	} else {
+		doc.WriteString(lipgloss.NewStyle().Width(viewWidth).Render("") + "\n")
 	}
 
 	prSection := strings.Builder{}

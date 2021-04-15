@@ -9,9 +9,11 @@ import (
 	//"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/go-github/v34/github"
 	"github.com/joho/godotenv"
 	"golang.org/x/term"
 
+	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/ui"
 )
@@ -34,13 +36,14 @@ type model struct {
 
 	cursor ui.CursorPos
 
-	nav *ui.TabNav
-
-	views []ui.PRViewData
+	nav    *ui.TabNav
+	views  []ui.PRViewData
+	footer *ui.Footer
 
 	statusChan            chan string
 	statusMessage         string
-	remainingRequestsChan chan string
+	remainingRequestsChan chan github.Rate
+	currentRateInfo       *github.Rate
 
 	ds           *datasource.Datasource
 	prUpdateChan chan *datasource.PullRequest
@@ -64,23 +67,34 @@ var initialModel = model{
 		&ui.TeamPrs{},
 		&ui.ActivePRs{},
 	},
+	footer: &ui.Footer{},
 
 	statusChan:            make(chan string),
 	statusMessage:         "",
-	remainingRequestsChan: make(chan string),
+	remainingRequestsChan: make(chan github.Rate),
 
 	prUpdateChan: make(chan *datasource.PullRequest),
 }
 
 func (m *model) Init() tea.Cmd {
-	m.ds = datasource.New()
+	c, err := config.LoadConfig()
+	if err != nil {
+		println(fmt.Sprintf("%s", err))
+		os.Exit(1)
+		return tick()
+	}
+
+	m.ds = datasource.New(c)
 	m.ds.SetStatusChan(m.statusChan)
 	m.ds.SetRemainingRequestsChan(m.remainingRequestsChan)
 	m.ds.SetPRUpdateChan(m.prUpdateChan)
 
 	go m.listenForStatusChanges()
 	go m.listenForPRChanges()
+	go m.listenForRemainingRequests()
 	go m.ds.RefreshData()
+
+	m.ds.LoadLocalCache()
 
 	m.statusMessage = "init..."
 	return tick()
@@ -166,19 +180,28 @@ func (m *model) View() string {
 
 	renderedPage := strings.Builder{}
 
+	// Tab Nav
 	renderedPage.WriteString(m.nav.BuildView(width, navHeight, m.tabNames, m.cursor.X))
 
+	// Body View
 	v := m.views[m.cursor.X]
 	renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
 
-	footer := ui.Footer{}
-	renderedPage.WriteString(footer.BuildView(width, footerHeight, m.statusMessage))
+	// Footer
+	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo))
 	return renderedPage.String()
 }
 
 func (m *model) listenForStatusChanges() {
 	for {
 		m.statusMessage = <-m.statusChan
+	}
+}
+
+func (m *model) listenForRemainingRequests() {
+	for {
+		rate := <-m.remainingRequestsChan
+		m.currentRateInfo = &rate
 	}
 }
 
