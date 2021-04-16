@@ -29,12 +29,16 @@ type PullRequest struct {
 
 	IAmAuthor                  bool
 	AuthorIsTeammate           bool
+	AuthorIsBot                bool
 	HasChangesAfterLastComment bool
 	LastCommentTime            time.Time
 	LastCommitTime             time.Time
 	IsApproved                 bool
 	IsAbandoned                bool
 	IsDraft                    bool
+	Additions                  int
+	Deletions                  int
+	CodeDelta                  int
 
 	Importance float64
 
@@ -42,16 +46,26 @@ type PullRequest struct {
 }
 
 func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds *Datasource) {
-	pr.Author = *pr.PR.User.Login
+	pr.Author = pr.PR.User.GetLogin()
 	pr.OrgName = orgName
 	pr.RepoName = repoName
 	pr.NumCommits = len(pr.Commits)
-	pr.IsDraft = *pr.PR.Draft
+	pr.IsDraft = pr.PR.GetDraft()
 	pr.IAmAuthor = (pr.Author == ds.config.GithubUsername)
+	pr.Additions = pr.PR.GetAdditions()
+	pr.Deletions = pr.PR.GetDeletions()
+	pr.CodeDelta = pr.Additions + pr.Deletions
 
 	for _, n := range ds.config.TeamUsernames {
 		if n == pr.Author {
 			pr.AuthorIsTeammate = true
+			break
+		}
+	}
+
+	for _, n := range ds.config.BotUsernames {
+		if n == pr.Author {
+			pr.AuthorIsBot = true
 			break
 		}
 	}
@@ -106,63 +120,108 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 	}
 }
 
+// All importance values are normilized to 0-100
 func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	importance := 0.0
 
-	// TODO: add importance if i am CODEOWNER
+	// TODOs:
 
-	// if I am not the author and it is approved we dont need to look at it
-	if pr.Author != ds.config.GithubUsername && pr.IsApproved {
-		return
-	}
-	// if this pr is abandoned then drop it to the bottom
+	// add importance if i am CODEOWNER
+	// If not author, already replied, and not yet re-requested: pr.Importance=4
+	// If author, and no one has reviewed: pr.Importance=4
+	// "Interesting PRs": pr.Importance=5
+
+	// Sort by most recent activity first.
+
+	// if this pr is abandoned then we dont need to look at it
 	if pr.IsAbandoned {
 		return
 	}
+
+	// if I am not the author and it is approved we dont need to look at it
+	if !pr.IAmAuthor && pr.IsApproved {
+		return
+	}
+
+	// if it is mine and approved we should go look at it
+	if pr.IAmAuthor && pr.IsApproved {
+		importance = math.MaxFloat64
+		return
+	}
+
 	// if this pr is a draft push to the bottom
 	if pr.IsDraft {
 		pr.Importance = 1
 		return
 	}
 
-	// 1. if I am NOT the author add 50
+	// if I am NOT the author
 	if !pr.IAmAuthor {
-		importance += 50
+		importance += 100
 	}
 
-	// 2. if author is teammate add 50
+	// if author is teammate add 50
 	if pr.AuthorIsTeammate {
-		importance += 50
+		importance += 100
 	}
 
-	// 3. if I am NOT the author (100-POW(NUM_REQUESTED_REVIEWERS,2))
+	// if the author is not a bot add 50
+	if !pr.AuthorIsBot {
+		importance += 100
+	}
+
+	// code delta
+	codeImp := (1 / (float64(pr.CodeDelta) + 100)) * 1000
+	importance += clampFloat(codeImp, 0, 100)
+
+	// if I am NOT the author
 	if pr.Author != ds.config.GithubUsername {
 		revCount := float64(len(pr.RequestedReviewers))
-		importance += (100 - math.Pow(revCount, 2))
+		imp := ((1 / (revCount + 5)) * 1000) * 0.5
+		importance += clampFloat(imp, 0, 100)
+
+		// (100-POW(NUM_REQUESTED_REVIEWERS,2))
+		// importance += (100 - math.Pow(revCount, 2))
 	}
 
-	// 4. total pr age in min ((50/7500)*PR_AGE_MIN+25)
-	prAgeMin := time.Now().Sub(*pr.PR.CreatedAt) / time.Minute
-	importance += float64(((50 / 7500) * prAgeMin) + 25)
+	// removing for now. this seems to give a bad signal
+	// total pr age in min ((50/7500)*PR_AGE_MIN+25)
+	//prAgeMin := time.Now().Sub(*pr.PR.CreatedAt) / time.Minute
+	//importance += float64(((50 / 7500) * prAgeMin) + 25)
 
-	// 5. min since last commit. if I am NOT the author ((100/7500)*MIN_SINCE_LAST_COMMIT+50)
-	if pr.Author != ds.config.GithubUsername {
+	// min since last commit. if I am NOT the author
+	if pr.Author != ds.config.GithubUsername && pr.HasChangesAfterLastComment {
 		minSinceLastCommit := time.Now().Sub(pr.LastCommitTime) / time.Minute
-		importance += float64((100/7500)*minSinceLastCommit + 50)
+		// at 24 hrs day the importance is 100
+		imp := math.Pow(float64(minSinceLastCommit), 2) / 100000000
+		importance += clampFloat(imp, 0, 100)
+
+		//((100/7500)*MIN_SINCE_LAST_COMMIT+50)
+		//importance += float64((100/7500)*minSinceLastCommit + 50)
 	}
 
-	// 6. min since last comment if I AM the author ((600/7500)*MIN_SINCE_LAST_COMMENT+50)
+	// min since last comment if I AM the author
 	if pr.Author == ds.config.GithubUsername {
 		minSinceLastComment := time.Now().Sub(pr.LastCommentTime) / time.Minute
-		importance += float64((100/7500)*minSinceLastComment + 50)
-	}
+		// at 24 hrs day the importance is 100
+		imp := math.Pow(float64(minSinceLastComment), 2) / 100000000
+		importance += clampFloat(imp, 0, 100)
 
-	// 7. if it is mine and approved we should go look at it
-	if pr.Author == ds.config.GithubUsername && pr.IsApproved {
-		importance += float64(prAgeMin)
+		//((600/7500)*MIN_SINCE_LAST_COMMENT+50)
+		//importance += float64((100/7500)*minSinceLastComment + 50)
 	}
 
 	pr.Importance = importance
+}
+
+func clampFloat(val float64, min float64, max float64) float64 {
+	if val < min {
+		return min
+	}
+	if val > max {
+		return max
+	}
+	return val
 }
 
 func (ds *Datasource) UpdateExistingPr(org string, repo string, pr *PullRequest, ghpr *github.PullRequest) error {

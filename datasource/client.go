@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 
 	"github.com/google/go-github/v34/github"
 	"github.com/inburst/prty/config"
@@ -19,7 +20,10 @@ type Datasource struct {
 
 	config *config.Config
 
-	allPRs []*PullRequest
+	allPRs    map[string]*PullRequest
+	cachedPRs map[string]*PullRequest
+
+	mutex sync.RWMutex
 }
 
 var sharedGithubClient *github.Client
@@ -72,8 +76,8 @@ func (ds *Datasource) LoadLocalCache() {
 	}
 }
 
-func (ds *Datasource) loadSaveFile() []*PullRequest {
-	prs := []*PullRequest{}
+func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
+	prs := map[string]*PullRequest{}
 	homeDirName, _ := os.UserHomeDir()
 	data, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/prs.json", homeDirName))
 	if err != nil {
@@ -86,27 +90,23 @@ func (ds *Datasource) loadSaveFile() []*PullRequest {
 }
 
 func (ds *Datasource) saveToFile() {
+	ds.mutex.Lock()
 	homeDirName, _ := os.UserHomeDir()
 	file, _ := json.MarshalIndent(ds.allPRs, "", " ")
 	_ = ioutil.WriteFile(fmt.Sprintf("%s/.prty/prs.json", homeDirName), file, 0644)
+	ds.mutex.Unlock()
 }
 
 func (ds *Datasource) RefreshData() {
+	ds.cachedPRs = ds.allPRs
+	ds.allPRs = map[string]*PullRequest{}
+
 	ds.writeStatus("fetching orgs...")
-
-	/*
-		ds.allPRs = append(ds.allPRs, &PullRequest{})
-		ds.allPRs = append(ds.allPRs, &PullRequest{})
-		ds.saveToFile()
-		return
-	*/
-
 	orgs, err := GetAllOrgs()
 	if err != nil {
 		ds.writeErrorStatus(err)
 		return
 	}
-	ds.writeStatus("gotem ")
 
 	for i := range orgs {
 		if orgs[i].Login != nil {
@@ -114,9 +114,9 @@ func (ds *Datasource) RefreshData() {
 			if listContains(ds.config.OrgBlacklist, orgName) {
 				continue
 			}
-			// if the whitelist is empty or this oprg is whitelisted
-			if len(ds.config.OrgWhitelist) == 0 || listContains(ds.config.OrgWhitelist, orgName) {
 
+			if (len(ds.config.OrgWhitelist) == 0 || listContains(ds.config.OrgWhitelist, orgName)) &&
+				(len(ds.config.OrgBlacklist) == 0 || !listContains(ds.config.OrgBlacklist, orgName)) {
 				ds.writeStatus(fmt.Sprintf("%s fetching repos...", orgName))
 				repos, err := GetAllReposForOrg(orgName)
 				if err != nil {
@@ -127,7 +127,10 @@ func (ds *Datasource) RefreshData() {
 
 				for _, repo := range repos {
 					repoName := *repo.Name
-					go ds.refreshRepo(orgName, repoName)
+					if (len(ds.config.RepoWhitelist) == 0 || listContains(ds.config.RepoWhitelist, orgName)) &&
+						(len(ds.config.RepoBlacklist) == 0 || !listContains(ds.config.RepoBlacklist, orgName)) {
+						go ds.refreshRepo(orgName, repoName)
+					}
 				}
 			}
 		}
@@ -149,16 +152,12 @@ func (ds *Datasource) refreshRepo(orgName string, repoName string) {
 }
 
 func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.PullRequest) {
-	var existingPr *PullRequest
-	for _, pr := range ds.allPRs {
-		if pr.PR.GetID() == ghpr.GetID() {
-			existingPr = pr
-			break
-		}
-	}
-
-	if existingPr != nil {
+	if existingPr, ok := ds.cachedPRs[ghpr.GetNodeID()]; ok {
 		ds.UpdateExistingPr(orgName, repoName, existingPr, ghpr)
+		ds.mutex.Lock()
+		ds.allPRs[existingPr.PR.GetNodeID()] = existingPr
+		ds.mutex.Unlock()
+		ds.prUpdateChan <- existingPr
 	} else {
 		newPR, err := ds.BuildPullRequest(orgName, repoName, ghpr)
 		if err != nil {
@@ -166,9 +165,12 @@ func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.Pull
 			println(fmt.Sprintf("%s\n", err))
 			return
 		}
-		ds.allPRs = append(ds.allPRs, newPR)
-		ds.saveToFile()
+		ds.mutex.Lock()
+		ds.allPRs[newPR.PR.GetNodeID()] = newPR
+		ds.mutex.Unlock()
 		ds.prUpdateChan <- newPR
-		ds.statusChan <- "" // clear status after each PR
 	}
+
+	ds.saveToFile()
+	ds.statusChan <- "" // clear status after each PR
 }

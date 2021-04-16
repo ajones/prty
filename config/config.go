@@ -15,7 +15,10 @@ type Config struct {
 	GithubAccessToken string   `yaml:"GithubAccessToken"`
 	OrgWhitelist      []string `yaml:"OrgWhitelist"`
 	OrgBlacklist      []string `yaml:"OrgBlacklist"`
+	RepoWhitelist     []string `yaml:"RepoWhitelist"`
+	RepoBlacklist     []string `yaml:"RepoBlacklist"`
 	GithubUsername    string   `yaml:"GithubUsername"`
+	BotUsernames      []string `yaml:"BotUsernames"`
 	TeamUsernames     []string `yaml:"TeamUsernames"`
 	AbandonedAgeDays  int      `yaml:"AbandonedAgeDays"`
 }

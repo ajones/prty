@@ -59,13 +59,14 @@ var initialModel = model{
 	selected: make(map[int]struct{}),
 
 	selectedTabIndex: 0,
-	tabNames:         []string{"Needs Attention", "Team", "Active", "All"},
+	tabNames:         []string{"Needs Attention", "Team", "Active", "Bots"},
 
 	nav: &ui.TabNav{},
 	views: []ui.PRViewData{
 		&ui.PriorityPRs{},
 		&ui.TeamPrs{},
 		&ui.ActivePRs{},
+		&ui.BotsPrs{},
 	},
 	footer: &ui.Footer{},
 
@@ -118,10 +119,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "r":
 			m.refreshData()
+			for _, v := range m.views {
+				v.Clear()
+			}
 
 		case "s":
 			v := m.views[m.cursor.X]
-			println(fmt.Sprintf("%d %v", m.cursor.X, v))
 			v.OnSort()
 
 		// The "up" and "k" keys move the cursor up
@@ -172,11 +175,14 @@ func (m *model) refreshData() {
 func (m *model) View() string {
 	width, height, _ := term.GetSize(int(os.Stdout.Fd()))
 
+	heroHeight := 7
 	navHeight := 3
 	footerHeight := 1
-	bodyHeight := height - navHeight - footerHeight
+	bodyHeight := height - navHeight - footerHeight - heroHeight
 
 	renderedPage := strings.Builder{}
+
+	renderedPage.WriteString(ui.BuildHeader(width, heroHeight))
 
 	// Tab Nav
 	renderedPage.WriteString(m.nav.BuildView(width, navHeight, m.tabNames, m.cursor.X))

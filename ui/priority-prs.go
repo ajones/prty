@@ -26,7 +26,7 @@ type PriorityPRs struct {
 }
 
 func (p *PriorityPRs) OnNewPullData(pr *datasource.PullRequest) {
-	if !pr.IsAbandoned && !pr.IsDraft && !pr.IsApproved && pr.HasChangesAfterLastComment {
+	if !pr.IsAbandoned && !pr.IsDraft && !pr.IsApproved && !pr.AuthorIsBot && pr.HasChangesAfterLastComment {
 		p.pulls = append(p.pulls, pr)
 		p.needsSort = true
 	}

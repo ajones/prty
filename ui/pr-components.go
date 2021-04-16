@@ -30,7 +30,8 @@ type PRView struct {
 	cursor                     CursorPos
 }
 
-func BuildTabHeader(p PRViewData, viewWidth int, viewHeight int) string {
+func BuildHeader(viewWidth int, viewHeight int) string {
+	w := lipgloss.Width
 	doc := strings.Builder{}
 	var (
 		colors = colorGrid(1, 5)
@@ -44,14 +45,26 @@ func BuildTabHeader(p PRViewData, viewWidth int, viewHeight int) string {
 			title.WriteRune('\n')
 		}
 	}
+	renderedTitle := lipgloss.NewStyle().Padding(0, 2).Render(title.String())
 
-	desc := lipgloss.JoinVertical(lipgloss.Left,
-		descStyle.Render("Intellegent PR priority"),
-		infoStyle.Render("Author: "+divider+url("https://github.com/ajones")),
+	shortcuts := list.Copy().Width(30).Padding(0, 2).Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			listHeader("Keyboard Shortcuts"),
+			listItem("[o|entr|sp] open"),
+			listItem("[r]eload"),
+			listItem("[s]ort"),
+		),
 	)
 
-	row := lipgloss.JoinHorizontal(lipgloss.Top, title.String(), desc)
-	doc.WriteString("\n" + row + "\n\n")
+	desc := lipgloss.NewStyle().Width(viewWidth-w(renderedTitle)-w(shortcuts)).Padding(0, 2).Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			descStyle.Render("Intellegent PR priority"),
+			infoStyle.Render("Author: "+divider+url("https://github.com/ajones")),
+		),
+	)
+
+	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTitle, desc, shortcuts)
+	doc.WriteString("\n" + row + "\n")
 
 	return lipgloss.NewStyle().
 		MaxWidth(viewWidth).
@@ -62,14 +75,11 @@ func BuildTabHeader(p PRViewData, viewWidth int, viewHeight int) string {
 
 func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 	doc := strings.Builder{}
-	headerHeight := 7
 	pullPosHeight := 1
-	bodyHeight := viewHeight - headerHeight - pullPosHeight
+	bodyHeight := viewHeight - pullPosHeight
 
 	selectedIndex := p.GetSelectedIndex()
 	pulls := p.GetPulls()
-
-	doc.WriteString(BuildTabHeader(p, viewWidth, headerHeight))
 
 	msg := strings.Builder{}
 	if p.NeedsSort() {
@@ -90,10 +100,11 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 
 		if i == 0 {
 			prSection.WriteString(
-				pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", *pr.PR.Title)))
+				pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", pr.PR.GetTitle())))
 		} else {
 			prSection.WriteString(
 				pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
+
 		}
 		prSection.WriteString("\n")
 		prSection.WriteString(BuildPRFooter(p, viewWidth, pr))

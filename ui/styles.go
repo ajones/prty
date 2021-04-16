@@ -83,7 +83,7 @@ var (
 	// List.
 
 	list = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, true, false, false).
+		Border(lipgloss.NormalBorder(), false, false, false, false).
 		BorderForeground(subtle).
 		MarginRight(2).
 		Height(8).
@@ -136,8 +136,8 @@ var (
 
 	pullPositionStyle = lipgloss.NewStyle().
 				Align(lipgloss.Right).
-				Background(lightGrey).
-				Padding(0, 1)
+		//Background(lightGrey).
+		Padding(0, 1)
 
 	pullListStyle = lipgloss.NewStyle().
 			Align(lipgloss.Left).
@@ -148,6 +148,15 @@ var (
 				Padding(1, 1, 1, 1).
 				Foreground(white).
 				Background(purple)
+
+	historyStyle = lipgloss.NewStyle().
+			Align(lipgloss.Left).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(highlight).
+			Margin(1, 3, 0, 0).
+			Padding(1, 2).
+			Height(19).
+			Width(30)
 
 	// Tag
 	tagStyle = lipgloss.NewStyle().
