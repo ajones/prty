@@ -1,12 +1,12 @@
 package stats
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 
-	"gopkg.in/yaml.v3"
+	"github.com/inburst/prty/datasource"
 )
 
 type Stats struct {
@@ -28,13 +28,14 @@ func LoadStats() (*Stats, error) {
 	}
 
 	c := &Stats{}
-	yamlFile, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/stats.yaml", homeDirName))
+
+	data, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/stats.json", homeDirName))
 	if err != nil {
-		println("yamlFile.Get err #%v ", err)
+		println("read error %v ", err)
 	}
-	err = yaml.Unmarshal(yamlFile, c)
+	err = json.Unmarshal(data, &c)
 	if err != nil {
-		println("Unmarshal: %v", err)
+		println("unmarshall err %v ", err)
 	}
 
 	println("Loaded stats: ", fmt.Sprintf("%+v", c))
@@ -51,21 +52,32 @@ func checkAndCreateStatsFile() error {
 	dirPath := fmt.Sprintf("%s/.prty", homeDirName)
 	os.Mkdir(dirPath, 0755)
 
-	confPath := fmt.Sprintf("%s/stats.yaml", dirPath)
-	if _, err := os.Stat(confPath); os.IsNotExist(err) {
+	statsPath := fmt.Sprintf("%s/stats.json", dirPath)
+	if _, err := os.Stat(statsPath); os.IsNotExist(err) {
 		// some default values
 		blankConfig := &Stats{
-			StatsVersion: 1,
+			StatsVersion:     1,
+			PROpensPerAuthor: make(map[string]int),
 		}
-
-		var b bytes.Buffer
-		yamlEncoder := yaml.NewEncoder(&b)
-		yamlEncoder.SetIndent(2)
-		yamlEncoder.Encode(&blankConfig)
-		err = ioutil.WriteFile(confPath, b.Bytes(), 0644)
-		if err != nil {
-			return err
-		}
+		blankConfig.SaveToFile()
 	}
 	return nil
+}
+
+func (s *Stats) OnViewedPR(pr *datasource.PullRequest) {
+	s.LifetimePROpens += 1
+
+	if count, ok := s.PROpensPerAuthor[pr.Author]; !ok {
+		s.PROpensPerAuthor[pr.Author] = 1
+	} else {
+		s.PROpensPerAuthor[pr.Author] = count + 1
+	}
+	s.SaveToFile()
+}
+
+func (s *Stats) SaveToFile() error {
+	homeDirName, _ := os.UserHomeDir()
+	file, _ := json.MarshalIndent(s, "", " ")
+	err := ioutil.WriteFile(fmt.Sprintf("%s/.prty/stats.json", homeDirName), file, 0644)
+	return err
 }

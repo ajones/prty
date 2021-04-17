@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/inburst/prty/datasource"
+	"github.com/inburst/prty/stats"
 	"github.com/lucasb-eyer/go-colorful"
 )
 
@@ -14,10 +15,11 @@ type PRViewData interface {
 	GetSelectedIndex() int
 	NeedsSort() bool
 	GetPulls() []*datasource.PullRequest
+	GetSelectedPull() *datasource.PullRequest
 
 	OnSort()
 	Clear()
-	OnSelect(cursor CursorPos)
+	OnSelect(cursor CursorPos, stats *stats.Stats)
 	OnCursorMove(moxedX int, movedY int) bool
 	OnNewPullData(pr *datasource.PullRequest)
 }
@@ -47,12 +49,20 @@ func BuildHeader(viewWidth int, viewHeight int) string {
 	}
 	renderedTitle := lipgloss.NewStyle().Padding(0, 2).Render(title.String())
 
-	shortcuts := list.Copy().Width(30).Padding(0, 2).Render(
-		lipgloss.JoinVertical(lipgloss.Left,
+	shortcuts := list.Copy().Width(40).Padding(0, 2).Render(
+		lipgloss.JoinVertical(lipgloss.Center,
 			listHeader("Keyboard Shortcuts"),
-			listItem("[o|entr|sp] open"),
-			listItem("[r]eload"),
-			listItem("[s]ort"),
+			lipgloss.JoinHorizontal(lipgloss.Top,
+				lipgloss.JoinVertical(lipgloss.Left,
+					listItem("[r]eload"),
+					listItem("[s]ort"),
+					listItem("[o|entr|sp] open"),
+				),
+				lipgloss.JoinVertical(lipgloss.Left,
+					listItem("[d]escription"),
+					listItem("[esc] back"),
+				),
+			),
 		),
 	)
 

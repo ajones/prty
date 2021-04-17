@@ -44,7 +44,7 @@ func LoadConfig() (*Config, error) {
 		println("Unmarshal: %v", err)
 	}
 
-	println("Loaded config: ", fmt.Sprintf("%+v", c))
+	println("Loaded config successfully")
 
 	return c, nil
 }

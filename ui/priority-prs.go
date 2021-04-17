@@ -6,6 +6,7 @@ import (
 
 	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
+	"github.com/inburst/prty/stats"
 )
 
 /*
@@ -41,13 +42,14 @@ func (p *PriorityPRs) NeedsSort() bool {
 	return p.needsSort
 }
 
-func (p *PriorityPRs) OnSelect(cursor CursorPos) {
+func (p *PriorityPRs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 	pull := p.pulls[p.currentlySelectedPullIndex]
 
 	now := time.Now()
 	pull.ViewedAt = &now
 
 	openbrowser(*pull.PR.HTMLURL)
+	stats.OnViewedPR(pull)
 }
 
 func (p *PriorityPRs) Clear() {
@@ -71,4 +73,8 @@ func (p *PriorityPRs) GetSelectedIndex() int {
 
 func (p *PriorityPRs) GetPulls() []*datasource.PullRequest {
 	return p.pulls
+}
+
+func (p *PriorityPRs) GetSelectedPull() *datasource.PullRequest {
+	return p.pulls[p.currentlySelectedPullIndex]
 }

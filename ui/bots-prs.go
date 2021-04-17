@@ -6,6 +6,7 @@ import (
 
 	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
+	"github.com/inburst/prty/stats"
 )
 
 type BotsPrs struct {
@@ -28,13 +29,14 @@ func (p *BotsPrs) NeedsSort() bool {
 	return p.needsSort
 }
 
-func (p *BotsPrs) OnSelect(cursor CursorPos) {
+func (p *BotsPrs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 	pull := p.pulls[p.currentlySelectedPullIndex]
 
 	now := time.Now()
 	pull.ViewedAt = &now
 
 	openbrowser(*pull.PR.HTMLURL)
+	stats.OnViewedPR(pull)
 }
 
 func (p *BotsPrs) Clear() {
@@ -58,4 +60,8 @@ func (p *BotsPrs) GetSelectedIndex() int {
 
 func (p *BotsPrs) GetPulls() []*datasource.PullRequest {
 	return p.pulls
+}
+
+func (p *BotsPrs) GetSelectedPull() *datasource.PullRequest {
+	return p.pulls[p.currentlySelectedPullIndex]
 }

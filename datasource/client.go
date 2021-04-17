@@ -81,11 +81,13 @@ func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
 	homeDirName, _ := os.UserHomeDir()
 	data, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/prs.json", homeDirName))
 	if err != nil {
-		println(fmt.Sprintf("%s", err))
+		println(fmt.Sprintf("error %s", err))
 		return prs
 	}
 	err = json.Unmarshal(data, &prs)
-	println(fmt.Sprintf("%s", err))
+	if err != nil {
+		println(fmt.Sprintf("error %s", err))
+	}
 	return prs
 }
 

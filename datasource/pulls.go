@@ -126,6 +126,8 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 
 	// TODOs:
 
+	// split score out per step for introspection
+
 	// add importance if i am CODEOWNER
 	// If not author, already replied, and not yet re-requested: pr.Importance=4
 	// If author, and no one has reviewed: pr.Importance=4

@@ -15,6 +15,7 @@ import (
 
 	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/datasource"
+	"github.com/inburst/prty/stats"
 	"github.com/inburst/prty/ui"
 )
 
@@ -36,9 +37,10 @@ type model struct {
 
 	cursor ui.CursorPos
 
-	nav    *ui.TabNav
-	views  []ui.PRViewData
-	footer *ui.Footer
+	nav        *ui.TabNav
+	views      []ui.PRViewData
+	footer     *ui.Footer
+	detailView *ui.PRDetail
 
 	statusChan            chan string
 	statusMessage         string
@@ -47,12 +49,11 @@ type model struct {
 
 	ds           *datasource.Datasource
 	prUpdateChan chan *datasource.PullRequest
+
+	stats *stats.Stats
 }
 
 var initialModel = model{
-	// Our to-do list is just a grocery list
-	choices: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-
 	// A map which indicates which choices are selected. We're using
 	// the  map like a mathematical set. The keys refer to the indexes
 	// of the `choices` slice, above.
@@ -80,7 +81,14 @@ var initialModel = model{
 func (m *model) Init() tea.Cmd {
 	c, err := config.LoadConfig()
 	if err != nil {
-		println(fmt.Sprintf("%s", err))
+		println(fmt.Sprintf("error %s", err))
+		os.Exit(1)
+		return tick()
+	}
+
+	m.stats, err = stats.LoadStats()
+	if err != nil {
+		println(fmt.Sprintf("error %s", err))
 		os.Exit(1)
 		return tick()
 	}
@@ -93,12 +101,16 @@ func (m *model) Init() tea.Cmd {
 	go m.listenForStatusChanges()
 	go m.listenForPRChanges()
 	go m.listenForRemainingRequests()
-	go m.ds.RefreshData()
 
 	m.ds.LoadLocalCache()
+	go m.ds.RefreshData()
 
 	m.statusMessage = "init..."
 	return tick()
+}
+
+func (m *model) IsViewingDetail() bool {
+	return m.detailView != nil
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -118,26 +130,54 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "r":
+			if m.IsViewingDetail() {
+				break
+			}
 			m.refreshData()
 			for _, v := range m.views {
 				v.Clear()
 			}
 
 		case "s":
+			if m.IsViewingDetail() {
+				break
+			}
 			v := m.views[m.cursor.X]
 			v.OnSort()
 
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
+			if m.IsViewingDetail() {
+				break
+			}
 			v := m.views[m.cursor.X]
 			v.OnCursorMove(0, -1)
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
+			if m.IsViewingDetail() {
+				break
+			}
 			v := m.views[m.cursor.X]
 			v.OnCursorMove(0, 1)
 
+		case "d":
+			if m.IsViewingDetail() {
+				break
+			}
+			v := m.views[m.cursor.X]
+			p := v.GetSelectedPull()
+			m.detailView = &ui.PRDetail{
+				PR: p,
+			}
+
+		case "esc":
+			m.detailView = nil
+
 		case "left":
+			if m.IsViewingDetail() {
+				break
+			}
 			m.cursor.Y = 0
 			m.cursor.X--
 			if m.cursor.X < 0 {
@@ -145,6 +185,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right":
+			if m.IsViewingDetail() {
+				break
+			}
 			m.cursor.Y = 0
 			m.cursor.X++
 			if m.cursor.X >= len(m.views) {
@@ -165,7 +208,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) sendSelectToActiveTab() {
 	v := m.views[m.cursor.X]
-	v.OnSelect(m.cursor)
+	v.OnSelect(m.cursor, m.stats)
 }
 
 func (m *model) refreshData() {
@@ -188,8 +231,12 @@ func (m *model) View() string {
 	renderedPage.WriteString(m.nav.BuildView(width, navHeight, m.tabNames, m.cursor.X))
 
 	// Body View
-	v := m.views[m.cursor.X]
-	renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
+	if m.detailView != nil {
+		renderedPage.WriteString(m.detailView.BuildView(width, bodyHeight))
+	} else {
+		v := m.views[m.cursor.X]
+		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
+	}
 
 	// Footer
 	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo))

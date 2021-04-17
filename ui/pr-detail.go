@@ -4,19 +4,22 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/google/go-github/v34/github"
+	"github.com/inburst/prty/datasource"
 )
 
-type PRDetail struct{}
+type PRDetail struct {
+	PR *datasource.PullRequest
+}
 
-func (p *PRDetail) BuildView(w int, h int, pull *github.PullRequest) string {
-	//physicalWidth, _, _ := term.GetSize(int(os.Stdout.Fd()))
+func (p *PRDetail) BuildView(w int, h int) string {
 	doc := strings.Builder{}
 
-	doc.WriteString(pullListStyle.Copy().Inherit(titleStyle).Width(w).Render(*pull.Title) + "\n")
+	doc.WriteString(pullListStyle.Copy().Inherit(titleStyle).Width(w).Render(p.PR.PR.GetTitle()) + "\n")
 
-	out, _ := glamour.Render(*pull.Body, "dark")
+	out, _ := glamour.Render(p.PR.PR.GetBody(), "dark")
 	doc.WriteString(out + "\n")
+
+	// TODO : add last comment and last commit to view
 
 	return docStyle.Copy().MaxWidth(w).Render(doc.String())
 }
