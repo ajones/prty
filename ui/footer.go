@@ -23,7 +23,7 @@ func (f *Footer) BuildView(viewWidth int, viewHeight int, statusMsg string, rate
 	rateMsg := ""
 	if rateInfo != nil {
 		untilReset := rateInfo.Reset.Sub(time.Now())
-		rateMsg = fmt.Sprintf("%d/%smin", rateInfo.Remaining, formatDurationToMin(untilReset))
+		rateMsg = fmt.Sprintf("RateLmt:%d/%smin", rateInfo.Remaining, formatDurationToMin(untilReset))
 	}
 	rateTag := tagSpecialStyle.Copy().Align(lipgloss.Right).Render(rateMsg)
 
@@ -43,5 +43,5 @@ func (f *Footer) BuildView(viewWidth int, viewHeight int, statusMsg string, rate
 
 	doc.WriteString(lipgloss.NewStyle().Width(viewWidth).Render(bar))
 
-	return lipgloss.NewStyle().Height(viewHeight).Render(doc.String())
+	return lipgloss.NewStyle().Background(darkerGrey).Height(viewHeight).Render(doc.String())
 }

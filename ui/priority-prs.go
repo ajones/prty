@@ -54,6 +54,7 @@ func (p *PriorityPRs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 
 func (p *PriorityPRs) Clear() {
 	p.pulls = []*datasource.PullRequest{}
+	p.currentlySelectedPullIndex = 0
 }
 
 func (p *PriorityPRs) OnCursorMove(moxedX int, movedY int) bool {

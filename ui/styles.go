@@ -9,16 +9,18 @@ var (
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 
-	pink      = lipgloss.Color("#FFACFC")
-	fusia     = lipgloss.Color("#F148FB")
-	blue      = lipgloss.Color("#7122FA")
-	purple    = lipgloss.Color("#560A86")
-	green     = lipgloss.Color("#80ED99")
-	red       = lipgloss.Color("#FF5F87")
-	white     = lipgloss.Color("#FAFAFA")
-	black     = lipgloss.Color("#000000")
-	lightGrey = lipgloss.Color("#383838")
-	darkGrey  = lipgloss.Color("#282828")
+	pink       = lipgloss.Color("#FFACFC")
+	fusia      = lipgloss.Color("#F148FB")
+	blue       = lipgloss.Color("#7122FA")
+	purple     = lipgloss.Color("#560A86")
+	green      = lipgloss.Color("#80ED99")
+	red        = lipgloss.Color("#FF5F87")
+	white      = lipgloss.Color("#FAFAFA")
+	black      = lipgloss.Color("#000000")
+	lightGrey  = lipgloss.Color("#383838")
+	grey       = lipgloss.Color("#303030")
+	darkGrey   = lipgloss.Color("#282828")
+	darkerGrey = lipgloss.Color("#111111")
 
 	divider = lipgloss.NewStyle().
 		SetString("•").
@@ -96,7 +98,7 @@ var (
 			MarginRight(2).
 			Render
 
-	listItem = lipgloss.NewStyle().PaddingLeft(2).Render
+	listItem = lipgloss.NewStyle().Padding(0, 1).Render
 
 	checkMark = lipgloss.NewStyle().SetString("✓").
 			Foreground(special).
@@ -109,12 +111,6 @@ var (
 			Foreground(lipgloss.AdaptiveColor{Light: "#969B86", Dark: "#696969"}).
 			Render(s)
 	}
-
-	// Status Bar.
-
-	statusNugget = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFDF5")).
-			Padding(0, 1)
 
 	// Pull Request
 	prStyle = lipgloss.NewStyle().
@@ -136,8 +132,7 @@ var (
 
 	pullPositionStyle = lipgloss.NewStyle().
 				Align(lipgloss.Right).
-		//Background(lightGrey).
-		Padding(0, 1)
+				Padding(0, 1)
 
 	pullListStyle = lipgloss.NewStyle().
 			Align(lipgloss.Left).

@@ -41,6 +41,7 @@ type model struct {
 	views      []ui.PRViewData
 	footer     *ui.Footer
 	detailView *ui.PRDetail
+	statsView  *ui.Stats
 
 	statusChan            chan string
 	statusMessage         string
@@ -54,11 +55,6 @@ type model struct {
 }
 
 var initialModel = model{
-	// A map which indicates which choices are selected. We're using
-	// the  map like a mathematical set. The keys refer to the indexes
-	// of the `choices` slice, above.
-	selected: make(map[int]struct{}),
-
 	selectedTabIndex: 0,
 	tabNames:         []string{"Needs Attention", "Team", "Active", "Bots"},
 
@@ -103,14 +99,17 @@ func (m *model) Init() tea.Cmd {
 	go m.listenForRemainingRequests()
 
 	m.ds.LoadLocalCache()
-	go m.ds.RefreshData()
 
-	m.statusMessage = "init..."
+	if c.RefreshOnStart {
+		go m.ds.RefreshData()
+		m.statusMessage = "init..."
+	}
+
 	return tick()
 }
 
-func (m *model) IsViewingDetail() bool {
-	return m.detailView != nil
+func (m *model) IsViewingSecondary() bool {
+	return m.detailView != nil || m.statsView != nil
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -130,24 +129,33 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "r":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
+			m.cursor.Y = 0 // reset any positional selection
 			m.refreshData()
 			for _, v := range m.views {
 				v.Clear()
 			}
 
 		case "s":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			v := m.views[m.cursor.X]
 			v.OnSort()
 
+		case "z":
+			if m.IsViewingSecondary() {
+				break
+			}
+			m.statsView = &ui.Stats{
+				UserStats: m.stats,
+			}
+
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			v := m.views[m.cursor.X]
@@ -155,14 +163,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			v := m.views[m.cursor.X]
 			v.OnCursorMove(0, 1)
 
 		case "d":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			v := m.views[m.cursor.X]
@@ -173,9 +181,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "esc":
 			m.detailView = nil
+			m.statsView = nil
 
 		case "left":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			m.cursor.Y = 0
@@ -185,7 +194,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right":
-			if m.IsViewingDetail() {
+			if m.IsViewingSecondary() {
 				break
 			}
 			m.cursor.Y = 0
@@ -209,6 +218,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) sendSelectToActiveTab() {
 	v := m.views[m.cursor.X]
 	v.OnSelect(m.cursor, m.stats)
+	m.ds.SaveToFile()
 }
 
 func (m *model) refreshData() {
@@ -233,6 +243,8 @@ func (m *model) View() string {
 	// Body View
 	if m.detailView != nil {
 		renderedPage.WriteString(m.detailView.BuildView(width, bodyHeight))
+	} else if m.statsView != nil {
+		renderedPage.WriteString(m.statsView.BuildView(width, bodyHeight))
 	} else {
 		v := m.views[m.cursor.X]
 		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))

@@ -41,6 +41,7 @@ func (p *BotsPrs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 
 func (p *BotsPrs) Clear() {
 	p.pulls = []*datasource.PullRequest{}
+	p.currentlySelectedPullIndex = 0
 }
 
 func (p *BotsPrs) OnCursorMove(moxedX int, movedY int) bool {

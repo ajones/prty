@@ -2,12 +2,16 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
+
+const DefaultGithubToken = "token with repo read permission"
+const DefaultGithubUserName = "Your github username"
 
 type Config struct {
 	ConfigVersion int `yaml:"ConfigVersion"`
@@ -21,6 +25,7 @@ type Config struct {
 	BotUsernames      []string `yaml:"BotUsernames"`
 	TeamUsernames     []string `yaml:"TeamUsernames"`
 	AbandonedAgeDays  int      `yaml:"AbandonedAgeDays"`
+	RefreshOnStart    bool     `yaml:"RefreshOnStart"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -35,7 +40,8 @@ func LoadConfig() (*Config, error) {
 	}
 
 	c := &Config{}
-	yamlFile, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/conf.yaml", homeDirName))
+	filePath := fmt.Sprintf("%s/.prty/conf.yaml", homeDirName)
+	yamlFile, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		println("yamlFile.Get err #%v ", err)
 	}
@@ -44,7 +50,10 @@ func LoadConfig() (*Config, error) {
 		println("Unmarshal: %v", err)
 	}
 
-	println("Loaded config successfully")
+	// detect default configuration
+	if c.GithubUsername == DefaultGithubUserName || c.GithubAccessToken == DefaultGithubToken {
+		return nil, errors.New(fmt.Sprintf("Please set up configuration at %s", filePath))
+	}
 
 	return c, nil
 }
@@ -63,8 +72,8 @@ func checkAndCreateConfigFile() error {
 		// some default values
 		blankConfig := &Config{
 			ConfigVersion:     1,
-			GithubAccessToken: "token with repo read permission",
-			GithubUsername:    "Your github username",
+			GithubAccessToken: DefaultGithubToken,
+			GithubUsername:    DefaultGithubUserName,
 			AbandonedAgeDays:  21,
 		}
 

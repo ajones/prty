@@ -91,7 +91,7 @@ func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
 	return prs
 }
 
-func (ds *Datasource) saveToFile() {
+func (ds *Datasource) SaveToFile() {
 	ds.mutex.Lock()
 	homeDirName, _ := os.UserHomeDir()
 	file, _ := json.MarshalIndent(ds.allPRs, "", " ")
@@ -173,6 +173,6 @@ func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.Pull
 		ds.prUpdateChan <- newPR
 	}
 
-	ds.saveToFile()
+	ds.SaveToFile()
 	ds.statusChan <- "" // clear status after each PR
 }

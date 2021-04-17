@@ -60,6 +60,7 @@ func BuildHeader(viewWidth int, viewHeight int) string {
 				),
 				lipgloss.JoinVertical(lipgloss.Left,
 					listItem("[d]escription"),
+					listItem("[z] stats"),
 					listItem("[esc] back"),
 				),
 			),
@@ -103,22 +104,25 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 	}
 
 	prSection := strings.Builder{}
+	if len(pulls) > 0 {
+		viewablePulls := pulls[selectedIndex:len(pulls)]
+		for i := range viewablePulls {
+			pr := viewablePulls[i]
 
-	viewablePulls := pulls[selectedIndex:len(pulls)]
-	for i := range viewablePulls {
-		pr := viewablePulls[i]
+			if i == 0 {
+				prSection.WriteString(
+					pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", pr.PR.GetTitle())))
+			} else {
+				prSection.WriteString(
+					pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
 
-		if i == 0 {
-			prSection.WriteString(
-				pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", pr.PR.GetTitle())))
-		} else {
-			prSection.WriteString(
-				pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
-
+			}
+			prSection.WriteString("\n")
+			prSection.WriteString(BuildPRFooter(p, viewWidth, pr))
+			prSection.WriteString("\n")
 		}
-		prSection.WriteString("\n")
-		prSection.WriteString(BuildPRFooter(p, viewWidth, pr))
-		prSection.WriteString("\n")
+	} else {
+		prSection.WriteString(lipgloss.NewStyle().Width(viewWidth).Align(lipgloss.Center).Render("[r]eload"))
 	}
 
 	doc.WriteString(docStyle.Copy().
