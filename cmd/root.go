@@ -278,10 +278,7 @@ func (m *model) listenForPRChanges() {
 }
 
 func Execute() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading .env file")
-	}
+	godotenv.Load()
 
 	p := tea.NewProgram(&initialModel)
 	// Use the full size of the terminal in its "alternate screen buffer"
