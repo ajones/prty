@@ -81,6 +81,7 @@ func (m *model) Init() tea.Cmd {
 		os.Exit(1)
 		return tick()
 	}
+	datasource.InitSharedClient(c.GithubAccessToken)
 
 	m.stats, err = stats.LoadStats()
 	if err != nil {
@@ -132,7 +133,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.IsViewingSecondary() {
 				break
 			}
-			m.cursor.Y = 0 // reset any positional selection
 			m.refreshData()
 			for _, v := range m.views {
 				v.Clear()

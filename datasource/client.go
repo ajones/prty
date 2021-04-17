@@ -29,17 +29,19 @@ type Datasource struct {
 var sharedGithubClient *github.Client
 
 func sharedClient() *github.Client {
-	if sharedGithubClient == nil {
-		ctx := context.Background()
-		ts := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: os.Getenv("GITHUB_ACCESS_TOKEN")},
-		)
-		tc := oauth2.NewClient(ctx, ts)
-
-		sharedGithubClient = github.NewClient(tc)
-	}
-
 	return sharedGithubClient
+}
+
+func InitSharedClient(tok string) error {
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: tok},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+
+	sharedGithubClient = github.NewClient(tc)
+
+	return nil
 }
 
 func New(c *config.Config) *Datasource {
