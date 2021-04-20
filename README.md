@@ -1,5 +1,7 @@
 # PRTY 
-Make reviewing PRs a PARTY 🎉
+***Make reviewing PRs a PARTY 🎉***
+
+PRTY is your new favorite tool for more effective PR reviewing. It determines the best open PRs for you to review and in what order. It drastically reduces the time to review for PRs in states that need eyes.
 
 
 ### Installation
@@ -49,6 +51,17 @@ GithubUsername: Place your Github username here
 | AbandonedAgeDays | Number of days after last activity before PR is considered abandoned |
 
 
+### How PRTY calculates **Importance**
+The algorithm can be reviewed [here](https://github.com/ajones/prty/blob/main/datasource/pulls.go#L126). It normilizes all feature calculations to a range from 0-100 then sums them all up to determine the importance value for each PR. This is used for sort order in each tab, highest imporanct at the top.
+
+**If you have ideas on how to improve this approach please put togeather a POC and make a PR!**
+
+
 ### Future Improvements ⚡️
 If you are inspired, pick one and open a PR!
-- ...
+- Expand settings page to top author opens. Data already in stats file.
+- Add `importance` per feature to the PR detail screen. Thinking a low % width column on the right side...🤷
+- Improve refresh algorithm to reduce number of new calls needed on refresh
+- Refactor out repeated code of the PR UI's
+- Loading animations... or heck any animations anywhere!
+- Should the visible tabs be configurable? 

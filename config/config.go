@@ -17,7 +17,7 @@ const StatsFileName = "stats.json"
 const PRCacheFileName = "prs.json"
 const LogFileName = "prty.log"
 const DefaultGithubToken = "token with repo read permission"
-const DefaultGithubUserName = "Your github username"
+const DefaultGithubUserName = "your github username"
 
 type Config struct {
 	ConfigVersion int `yaml:"ConfigVersion"`
