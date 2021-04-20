@@ -10,6 +10,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const PRTYVersion = "0.0.1"
+const AppCacheDirName = ".prty"
+const ConfFileName = "conf.yaml"
+const StatsFileName = "stats.json"
+const PRCacheFileName = "prs.json"
+const LogFileName = "prty.log"
 const DefaultGithubToken = "token with repo read permission"
 const DefaultGithubUserName = "Your github username"
 
@@ -34,20 +40,19 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	homeDirName, err := os.UserHomeDir()
+	filePath, err := GetConfigFilePath()
 	if err != nil {
 		return nil, err
 	}
 
 	c := &Config{}
-	filePath := fmt.Sprintf("%s/.prty/conf.yaml", homeDirName)
-	yamlFile, err := ioutil.ReadFile(filePath)
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		println("yamlFile.Get err #%v ", err)
+		return nil, err
 	}
-	err = yaml.Unmarshal(yamlFile, c)
+	err = yaml.Unmarshal(data, c)
 	if err != nil {
-		println("Unmarshal: %v", err)
+		return nil, err
 	}
 
 	// detect default configuration
@@ -59,15 +64,16 @@ func LoadConfig() (*Config, error) {
 }
 
 func checkAndCreateConfigFile() error {
-	homeDirName, err := os.UserHomeDir()
+	err := PrepApplicationCacheFolder()
 	if err != nil {
 		return err
 	}
 
-	dirPath := fmt.Sprintf("%s/.prty", homeDirName)
-	os.Mkdir(dirPath, 0755)
+	confPath, err := GetConfigFilePath()
+	if err != nil {
+		return err
+	}
 
-	confPath := fmt.Sprintf("%s/conf.yaml", dirPath)
 	if _, err := os.Stat(confPath); os.IsNotExist(err) {
 		// some default values
 		blankConfig := &Config{
@@ -75,16 +81,74 @@ func checkAndCreateConfigFile() error {
 			GithubAccessToken: DefaultGithubToken,
 			GithubUsername:    DefaultGithubUserName,
 			AbandonedAgeDays:  21,
+			RefreshOnStart:    true,
 		}
-
-		var b bytes.Buffer
-		yamlEncoder := yaml.NewEncoder(&b)
-		yamlEncoder.SetIndent(2) // this is what you're looking for
-		yamlEncoder.Encode(&blankConfig)
-		err = ioutil.WriteFile(confPath, b.Bytes(), 0644)
+		err = blankConfig.SaveToFile()
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *Config) SaveToFile() error {
+	confPath, err := GetConfigFilePath()
+	if err != nil {
+		return err
+	}
+
+	var b bytes.Buffer
+	yamlEncoder := yaml.NewEncoder(&b)
+	yamlEncoder.SetIndent(2)
+	yamlEncoder.Encode(&c)
+	err = ioutil.WriteFile(confPath, b.Bytes(), 0644)
+	return err
+}
+
+func getUserHomePathPath() (string, error) {
+	homeDirName, err := os.UserHomeDir()
+	return homeDirName, err
+}
+
+func buildScopedPathFor(filename string) (string, error) {
+	appCachePath, err := GetApplicationCachePath()
+	if err != nil {
+		return "", err
+	}
+	filePath := fmt.Sprintf("%s/%s", appCachePath, filename)
+	return filePath, nil
+}
+
+func PrepApplicationCacheFolder() error {
+	appCachePath, err := GetApplicationCachePath()
+	if err != nil {
+		return err
+	}
+	os.Mkdir(appCachePath, 0755)
+	return nil
+}
+
+func GetApplicationCachePath() (string, error) {
+	homeDirPath, err := getUserHomePathPath()
+	if err != nil {
+		return "", err
+	}
+	filePath := fmt.Sprintf("%s/%s", homeDirPath, AppCacheDirName)
+	return filePath, nil
+}
+
+func GetConfigFilePath() (string, error) {
+	return buildScopedPathFor(ConfFileName)
+}
+
+func GetStatsFilePath() (string, error) {
+	return buildScopedPathFor(StatsFileName)
+}
+
+func GetPRCacheFilePath() (string, error) {
+	return buildScopedPathFor(PRCacheFileName)
+}
+
+func GetLogFilePath() (string, error) {
+	return buildScopedPathFor(LogFileName)
 }

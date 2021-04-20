@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"sync"
 
 	"github.com/google/go-github/v34/github"
 	"github.com/inburst/prty/config"
+	"github.com/inburst/prty/logger"
 	"golang.org/x/oauth2"
 )
 
@@ -78,27 +78,28 @@ func (ds *Datasource) LoadLocalCache() {
 	}
 }
 
+// Supressed errors will cause the cache file to be emptied and rebuilt
+// effectivly self healing from corrupt or invalid data
 func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
 	prs := map[string]*PullRequest{}
-	homeDirName, _ := os.UserHomeDir()
-	data, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/prs.json", homeDirName))
+	cacheFilePath, err := config.GetPRCacheFilePath()
 	if err != nil {
-		println(fmt.Sprintf("error %s", err))
+		return prs
+	}
+	data, err := ioutil.ReadFile(cacheFilePath)
+	if err != nil {
 		return prs
 	}
 	err = json.Unmarshal(data, &prs)
-	if err != nil {
-		println(fmt.Sprintf("error %s", err))
-	}
 	return prs
 }
 
 func (ds *Datasource) SaveToFile() {
+	cacheFilePath, _ := config.GetPRCacheFilePath()
 	ds.mutex.Lock()
-	homeDirName, _ := os.UserHomeDir()
 	file, _ := json.MarshalIndent(ds.allPRs, "", " ")
-	_ = ioutil.WriteFile(fmt.Sprintf("%s/.prty/prs.json", homeDirName), file, 0644)
 	ds.mutex.Unlock()
+	_ = ioutil.WriteFile(cacheFilePath, file, 0644)
 }
 
 func (ds *Datasource) RefreshData() {
@@ -109,6 +110,7 @@ func (ds *Datasource) RefreshData() {
 	orgs, err := GetAllOrgs()
 	if err != nil {
 		ds.writeErrorStatus(err)
+		logger.Shared().Println(fmt.Sprintf("%s\n", err))
 		return
 	}
 
@@ -125,7 +127,7 @@ func (ds *Datasource) RefreshData() {
 				repos, err := GetAllReposForOrg(orgName)
 				if err != nil {
 					ds.writeErrorStatus(err)
-					println(fmt.Sprintf("%s\n", err))
+					logger.Shared().Println(fmt.Sprintf("%s\n", err))
 					return
 				}
 
@@ -146,7 +148,7 @@ func (ds *Datasource) refreshRepo(orgName string, repoName string) {
 	prs, err := ds.GetAllPullsForRepoInOrg(orgName, repoName)
 	if err != nil {
 		ds.writeErrorStatus(err)
-		println(fmt.Sprintf("%s\n", err))
+		logger.Shared().Println(fmt.Sprintf("%s\n", err))
 		return
 	}
 
@@ -166,7 +168,7 @@ func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.Pull
 		newPR, err := ds.BuildPullRequest(orgName, repoName, ghpr)
 		if err != nil {
 			ds.writeErrorStatus(err)
-			println(fmt.Sprintf("%s\n", err))
+			logger.Shared().Println(fmt.Sprintf("%s\n", err))
 			return
 		}
 		ds.mutex.Lock()

@@ -21,6 +21,7 @@ func (p *Stats) BuildView(viewWidth int, viewHeight int) string {
 		lipgloss.JoinVertical(lipgloss.Center,
 			statItem.Render("\n"),
 			listHeader("📈 PRTY Stats 📈"),
+
 			lipgloss.JoinHorizontal(lipgloss.Top,
 				lipgloss.JoinVertical(lipgloss.Right,
 					statItem.Render("Lifetime Opens"),

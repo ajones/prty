@@ -6,17 +6,16 @@ import (
 	"strings"
 	"time"
 
-	//"os"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/go-github/v34/github"
-	"github.com/joho/godotenv"
 	"golang.org/x/term"
 
 	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/datasource"
+	"github.com/inburst/prty/logger"
 	"github.com/inburst/prty/stats"
 	"github.com/inburst/prty/ui"
+	"github.com/inburst/prty/utils"
 )
 
 var (
@@ -75,20 +74,10 @@ var initialModel = model{
 }
 
 func (m *model) Init() tea.Cmd {
-	c, err := config.LoadConfig()
-	if err != nil {
-		println(fmt.Sprintf("error %s", err))
-		os.Exit(1)
-		return tick()
-	}
+	// these are pre-validated in checkConfiguration
+	c, _ := config.LoadConfig()
+	m.stats, _ = stats.LoadStats()
 	datasource.InitSharedClient(c.GithubAccessToken)
-
-	m.stats, err = stats.LoadStats()
-	if err != nil {
-		println(fmt.Sprintf("error %s", err))
-		os.Exit(1)
-		return tick()
-	}
 
 	m.ds = datasource.New(c)
 	m.ds.SetStatusChan(m.statusChan)
@@ -114,7 +103,6 @@ func (m *model) IsViewingSecondary() bool {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-
 	switch msg := msg.(type) {
 	case tickMsg:
 		return m, tick()
@@ -205,7 +193,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// The "enter" key and the spacebar (a literal space) toggle
 		// the selected state for the item that the cursor is pointing at.
-		case "enter", " ":
+		case "o", "enter", " ":
 			m.sendSelectToActiveTab()
 		}
 	}
@@ -213,6 +201,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Return the updated model to the Bubble Tea runtime for processing.
 	// Note that we're not returning a command.
 	return m, nil
+}
+
+func tick() tea.Cmd {
+	return tea.Tick(time.Duration(interval), func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m *model) sendSelectToActiveTab() {
@@ -232,14 +226,12 @@ func (m *model) View() string {
 	navHeight := 3
 	footerHeight := 1
 	bodyHeight := height - navHeight - footerHeight - heroHeight
-
 	renderedPage := strings.Builder{}
 
+	// Header
 	renderedPage.WriteString(ui.BuildHeader(width, heroHeight))
-
 	// Tab Nav
 	renderedPage.WriteString(m.nav.BuildView(width, navHeight, m.tabNames, m.cursor.X))
-
 	// Body View
 	if m.detailView != nil {
 		renderedPage.WriteString(m.detailView.BuildView(width, bodyHeight))
@@ -249,9 +241,9 @@ func (m *model) View() string {
 		v := m.views[m.cursor.X]
 		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
 	}
-
 	// Footer
 	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo))
+
 	return renderedPage.String()
 }
 
@@ -277,22 +269,53 @@ func (m *model) listenForPRChanges() {
 	}
 }
 
-func Execute() {
-	godotenv.Load()
-
+func startUI() {
 	p := tea.NewProgram(&initialModel)
 	// Use the full size of the terminal in its "alternate screen buffer"
 	p.EnterAltScreen()
 	defer p.ExitAltScreen()
 
 	if err := p.Start(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
+		fmt.Printf("Error starting UI : %s", err)
 		os.Exit(1)
 	}
 }
 
-func tick() tea.Cmd {
-	return tea.Tick(time.Duration(interval), func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+func handleArguments() {
+	args := os.Args
+	// -v
+	if utils.Contains(args, "-v") {
+		fmt.Printf("version: %s\n", config.PRTYVersion)
+		os.Exit(0)
+	}
+}
+
+func checkConfiguration() {
+	err := logger.InitializeLogger()
+	if err != nil {
+		fmt.Printf("Error initilizting logger %s\n%s", err)
+		os.Exit(1)
+	}
+
+	logPath, _ := config.GetLogFilePath()
+	moreInformationMessage := fmt.Sprintf("Debug information available at %s\n", logPath)
+
+	_, err = config.LoadConfig()
+	if err != nil {
+		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		os.Exit(1)
+	}
+
+	_, err = stats.LoadStats()
+	if err != nil {
+		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		os.Exit(1)
+	}
+
+}
+
+func Execute() {
+	checkConfiguration()
+	handleArguments()
+	startUI()
 }

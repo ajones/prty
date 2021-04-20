@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-github/v34/github"
 )
@@ -19,7 +18,6 @@ func GetAllReposForOrg(orgName string) ([]*github.Repository, error) {
 	for {
 		repos, resp, err := sharedClient().Repositories.ListByOrg(ctx, orgName, opt)
 		if err != nil {
-			fmt.Printf("%s", err)
 			return allRepos, err
 		}
 		allRepos = append(allRepos, repos...)

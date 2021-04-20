@@ -2,10 +2,10 @@ package stats
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 
+	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/datasource"
 )
 
@@ -22,37 +22,35 @@ func LoadStats() (*Stats, error) {
 		return nil, err
 	}
 
-	homeDirName, err := os.UserHomeDir()
+	filePath, err := config.GetStatsFilePath()
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Stats{}
-
-	data, err := ioutil.ReadFile(fmt.Sprintf("%s/.prty/stats.json", homeDirName))
+	s := &Stats{}
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		println("read error %v ", err)
+		return nil, err
 	}
-	err = json.Unmarshal(data, &c)
+	err = json.Unmarshal(data, &s)
 	if err != nil {
-		println("unmarshall err %v ", err)
+		return nil, err
 	}
 
-	println("Loaded stats: ", fmt.Sprintf("%+v", c))
-
-	return c, nil
+	return s, nil
 }
 
 func checkAndCreateStatsFile() error {
-	homeDirName, err := os.UserHomeDir()
+	err := config.PrepApplicationCacheFolder()
 	if err != nil {
 		return err
 	}
 
-	dirPath := fmt.Sprintf("%s/.prty", homeDirName)
-	os.Mkdir(dirPath, 0755)
+	statsPath, err := config.GetStatsFilePath()
+	if err != nil {
+		return err
+	}
 
-	statsPath := fmt.Sprintf("%s/stats.json", dirPath)
 	if _, err := os.Stat(statsPath); os.IsNotExist(err) {
 		// some default values
 		blankConfig := &Stats{
@@ -76,8 +74,16 @@ func (s *Stats) OnViewedPR(pr *datasource.PullRequest) {
 }
 
 func (s *Stats) SaveToFile() error {
-	homeDirName, _ := os.UserHomeDir()
-	file, _ := json.MarshalIndent(s, "", " ")
-	err := ioutil.WriteFile(fmt.Sprintf("%s/.prty/stats.json", homeDirName), file, 0644)
+	statsPath, err := config.GetStatsFilePath()
+	if err != nil {
+		return err
+	}
+
+	file, err := json.MarshalIndent(s, "", " ")
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(statsPath, file, 0644)
 	return err
 }

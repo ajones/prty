@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-github/v34/github"
 )
@@ -17,7 +16,6 @@ func GetAllOrgs() ([]*github.Organization, error) {
 	for {
 		reviews, resp, err := sharedClient().Organizations.List(ctx, "", opt)
 		if err != nil {
-			fmt.Printf("%s", err)
 			return allOrgs, err
 		}
 		allOrgs = append(allOrgs, reviews...)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v34/github"
+	"github.com/inburst/prty/logger"
 )
 
 var currentPulls []*PullRequest = []*PullRequest{}
@@ -344,15 +345,15 @@ func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) (
 	// get all pages of results
 	var allPulls []*github.PullRequest
 	for {
-		println(fmt.Sprintf("pulls: %s/%s p:%d", orgName, repoName, opt.Page))
+		logger.Shared().Println(fmt.Sprintf("pulls: %s/%s p:%d", orgName, repoName, opt.Page))
 		prs, resp, err := sharedClient().PullRequests.List(ctx, orgName, repoName, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
-			println("pulls: hit rate limit")
+			logger.Shared().Println("pulls: hit rate limit")
 			time.Sleep(time.Duration(5) * time.Second)
 			continue
 		}
 		if err != nil {
-			println(fmt.Sprintf("pulls: error %s", err))
+			logger.Shared().Println(fmt.Sprintf("pulls: error %s", err))
 			return allPulls, err
 		}
 		ds.remainingRequestsChan <- resp.Rate
@@ -374,15 +375,15 @@ func (ds *Datasource) GetAllCommitsForPull(org string, repo string, prNumber int
 	// get all pages of results
 	var allCommits []*github.RepositoryCommit
 	for {
-		println(fmt.Sprintf("commits: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Println(fmt.Sprintf("commits: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		commits, resp, err := sharedClient().PullRequests.ListCommits(ctx, org, repo, prNumber, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
-			println("commits: hit rate limit")
+			logger.Shared().Println("commits: hit rate limit")
 			time.Sleep(time.Duration(5) * time.Second)
 			continue
 		}
 		if err != nil {
-			println(fmt.Sprintf("commits: error %s", err))
+			logger.Shared().Println(fmt.Sprintf("commits: error %s", err))
 			return allCommits, lastPage, err
 		}
 		ds.remainingRequestsChan <- resp.Rate
@@ -407,15 +408,15 @@ func (ds *Datasource) GetAllCommentsForPull(org string, repo string, prNumber in
 	// get all pages of results
 	var allComments []*github.PullRequestComment
 	for {
-		println(fmt.Sprintf("comments: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Println(fmt.Sprintf("comments: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		comments, resp, err := sharedClient().PullRequests.ListComments(ctx, org, repo, prNumber, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
-			println("comments: hit rate limit")
+			logger.Shared().Println("comments: hit rate limit")
 			time.Sleep(time.Duration(5) * time.Second)
 			continue
 		}
 		if err != nil {
-			println(fmt.Sprintf("comments: error %s", err))
+			logger.Shared().Println(fmt.Sprintf("comments: error %s", err))
 			return allComments, lastPage, err
 		}
 		ds.remainingRequestsChan <- resp.Rate
@@ -441,15 +442,15 @@ func (ds *Datasource) GetAllReviewsForPull(org string, repo string, prNumber int
 	// get all pages of results
 	var allReviews []*github.PullRequestReview
 	for {
-		println(fmt.Sprintf("reviews: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Println(fmt.Sprintf("reviews: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
 		reviews, resp, err := sharedClient().PullRequests.ListReviews(ctx, org, repo, prNumber, nil)
 		if _, ok := err.(*github.RateLimitError); ok {
-			println("reviews: hit rate limit")
+			logger.Shared().Println("reviews: hit rate limit")
 			time.Sleep(time.Duration(5) * time.Second)
 			continue
 		}
 		if err != nil {
-			println(fmt.Sprintf("reviews: error %s", err))
+			logger.Shared().Println(fmt.Sprintf("reviews: error %s", err))
 			return allReviews, lastPage, err
 		}
 		allReviews = append(allReviews, reviews...)
