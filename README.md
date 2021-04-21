@@ -59,6 +59,8 @@ The algorithm can be reviewed [here](https://github.com/ajones/prty/blob/main/da
 
 ### Future Improvements ⚡️
 If you are inspired, pick one and open a PR!
+- Add CODEOWNERS detection in the importance calculation
+- Automatically generate Personal Access Token
 - Expand settings page to top author opens. Data already in stats file.
 - Add `importance` per feature to the PR detail screen. Thinking a low % width column on the right side...🤷
 - Improve refresh algorithm to reduce number of new calls needed on refresh

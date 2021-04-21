@@ -107,13 +107,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tick()
 
-	// Is it a key press?
 	case tea.KeyMsg:
-
-		// Cool, what was the actual key pressed?
 		switch msg.String() {
 
-		// These keys should exit the program.
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
@@ -141,7 +137,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				UserStats: m.stats,
 			}
 
-		// The "up" and "k" keys move the cursor up
 		case "up", "k":
 			if m.IsViewingSecondary() {
 				break
@@ -149,7 +144,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			v := m.views[m.cursor.X]
 			v.OnCursorMove(0, -1)
 
-		// The "down" and "j" keys move the cursor down
 		case "down", "j":
 			if m.IsViewingSecondary() {
 				break
@@ -171,7 +165,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailView = nil
 			m.statsView = nil
 
-		case "left":
+		case "left", "h":
 			if m.IsViewingSecondary() {
 				break
 			}
@@ -181,7 +175,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor.X = 0
 			}
 
-		case "right":
+		case "right", "l":
 			if m.IsViewingSecondary() {
 				break
 			}
@@ -298,7 +292,7 @@ func checkConfiguration() {
 	}
 
 	logPath, _ := config.GetLogFilePath()
-	moreInformationMessage := fmt.Sprintf("Debug information available at %s\n", logPath)
+	moreInformationMessage := fmt.Sprintf("Debug information available at %s\nPlease review the README if you encounter any issues https://github.com/ajones/prty\n", logPath)
 
 	_, err = config.LoadConfig()
 	if err != nil {
@@ -315,7 +309,9 @@ func checkConfiguration() {
 }
 
 func Execute() {
-	checkConfiguration()
-	handleArguments()
-	startUI()
+	//checkConfiguration()
+	//handleArguments()
+	//startUI()
+	logger.InitializeLogger()
+	datasource.GenerateAccessToken()
 }

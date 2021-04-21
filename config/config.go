@@ -55,12 +55,31 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// detect default configuration
-	if c.GithubUsername == DefaultGithubUserName || c.GithubAccessToken == DefaultGithubToken {
-		return nil, errors.New(fmt.Sprintf("Please set up configuration at %s", filePath))
+	if err = validate(c); err != nil {
+		return nil, err
 	}
 
 	return c, nil
+}
+
+func validate(c *Config) error {
+	filePath, err := GetConfigFilePath()
+	if err != nil {
+		return err
+	}
+
+	// detect default configuration
+	if c.GithubUsername == DefaultGithubUserName || len(c.GithubUsername) == 0 ||
+		c.GithubAccessToken == DefaultGithubToken || len(c.GithubAccessToken) == 0 {
+		msgFormat := "Please set up configuration at %s\nYou must input your github username and generate a github access token with `org:read` and `repo` permissions."
+		return errors.New(fmt.Sprintf(msgFormat, filePath))
+	}
+
+	if c.AbandonedAgeDays < 0 {
+		errFormat := "AbandonedAgeDays must be a value greater than or equal to 0, currently [%d]\n Config file can be found at %s\n"
+		return errors.New(fmt.Sprintf(errFormat, c.AbandonedAgeDays, filePath))
+	}
+	return nil
 }
 
 func checkAndCreateConfigFile() error {
