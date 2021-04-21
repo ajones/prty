@@ -309,9 +309,7 @@ func checkConfiguration() {
 }
 
 func Execute() {
-	//checkConfiguration()
-	//handleArguments()
-	//startUI()
-	logger.InitializeLogger()
-	datasource.GenerateAccessToken()
+	checkConfiguration()
+	handleArguments()
+	startUI()
 }
