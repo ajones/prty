@@ -20,8 +20,9 @@ type Datasource struct {
 
 	config *config.Config
 
-	allPRs    map[string]*PullRequest
-	cachedPRs map[string]*PullRequest
+	allPRs              map[string]*PullRequest
+	cachedPRs           map[string]*PullRequest
+	currentlyRefreshing bool
 
 	mutex sync.RWMutex
 }
@@ -78,6 +79,10 @@ func (ds *Datasource) LoadLocalCache() {
 	}
 }
 
+func (ds *Datasource) IsCurrentlyRefreshingData() bool {
+	return ds.currentlyRefreshing
+}
+
 // Supressed errors will cause the cache file to be emptied and rebuilt
 // effectivly self healing from corrupt or invalid data
 func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
@@ -103,6 +108,7 @@ func (ds *Datasource) SaveToFile() {
 }
 
 func (ds *Datasource) RefreshData() {
+	ds.currentlyRefreshing = true
 	ds.cachedPRs = ds.allPRs
 	ds.allPRs = map[string]*PullRequest{}
 
@@ -111,6 +117,7 @@ func (ds *Datasource) RefreshData() {
 	if err != nil {
 		ds.writeErrorStatus(err)
 		logger.Shared().Println(fmt.Sprintf("%s\n", err))
+		ds.currentlyRefreshing = false
 		return
 	}
 
@@ -128,6 +135,7 @@ func (ds *Datasource) RefreshData() {
 				if err != nil {
 					ds.writeErrorStatus(err)
 					logger.Shared().Println(fmt.Sprintf("%s\n", err))
+					ds.currentlyRefreshing = false
 					return
 				}
 
@@ -141,6 +149,7 @@ func (ds *Datasource) RefreshData() {
 			}
 		}
 	}
+	ds.currentlyRefreshing = false
 }
 
 func (ds *Datasource) refreshRepo(orgName string, repoName string) {

@@ -57,11 +57,13 @@ func BuildHeader(viewWidth int, viewHeight int) string {
 					listItem("[r]eload"),
 					listItem("[s]ort"),
 					listItem("[o|entr|sp] open"),
+					listItem("[arrows] move"),
 				),
 				lipgloss.JoinVertical(lipgloss.Left,
 					listItem("[d]escription"),
 					listItem("[z] stats"),
 					listItem("[esc] back"),
+					listItem("[hjkl] vim move"),
 				),
 			),
 		),
@@ -69,7 +71,7 @@ func BuildHeader(viewWidth int, viewHeight int) string {
 
 	desc := lipgloss.NewStyle().Width(viewWidth-w(renderedTitle)-w(shortcuts)).Padding(0, 2).Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			descStyle.Render("Intellegent PR priority"),
+			descStyle.Render("Intellegent PR Review Priority"),
 			infoStyle.Render("Author: "+divider+url("https://github.com/ajones")),
 		),
 	)
@@ -84,7 +86,7 @@ func BuildHeader(viewWidth int, viewHeight int) string {
 		Render(doc.String()) + "\n"
 }
 
-func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
+func BuildPRView(p PRViewData, viewWidth int, viewHeight int, isRefreshing bool) string {
 	doc := strings.Builder{}
 	pullPosHeight := 1
 	bodyHeight := viewHeight - pullPosHeight
@@ -94,7 +96,7 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 
 	msg := strings.Builder{}
 	if p.NeedsSort() {
-		msg.WriteString("NEEDS (S)ORT  ")
+		msg.WriteString(lipgloss.NewStyle().Bold(true).Render("NEEDS (S)ORT  "))
 	}
 	if len(pulls) > 0 {
 		msg.WriteString(fmt.Sprintf("%d of %d", selectedIndex+1, len(pulls)))
@@ -122,7 +124,11 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int) string {
 			prSection.WriteString("\n")
 		}
 	} else {
-		prSection.WriteString(lipgloss.NewStyle().Width(viewWidth).Align(lipgloss.Center).Render("[r]eload"))
+		if isRefreshing {
+			prSection.WriteString(lipgloss.NewStyle().Width(viewWidth).Align(lipgloss.Center).Render("refreshing..."))
+		} else {
+			prSection.WriteString(lipgloss.NewStyle().Width(viewWidth).Align(lipgloss.Center).Render("nothing to show\nhere is a cat 🐈\n\n[r]eload"))
+		}
 	}
 
 	doc.WriteString(docStyle.Copy().

@@ -233,7 +233,7 @@ func (m *model) View() string {
 		renderedPage.WriteString(m.statsView.BuildView(width, bodyHeight))
 	} else {
 		v := m.views[m.cursor.X]
-		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight))
+		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight, m.ds.IsCurrentlyRefreshingData()))
 	}
 	// Footer
 	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo))
