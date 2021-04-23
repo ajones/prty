@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v34/github"
-	"github.com/inburst/prty/logger"
 	"golang.org/x/oauth2"
 )
 
@@ -32,7 +31,6 @@ func CheckAccessToken(tok string, userName string) error {
 		found := false
 		for _, s := range scopes {
 			trimmed := strings.Trim(s, " ")
-			logger.Shared().Printf("%s %s", trimmed, es)
 			if trimmed == es {
 				found = true
 				break
