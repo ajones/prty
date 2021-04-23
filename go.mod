@@ -8,10 +8,8 @@ require (
 	github.com/charmbracelet/lipgloss v0.1.2
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548
 	github.com/gin-gonic/gin v1.7.1
-	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v34 v34.0.0
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/joho/godotenv v1.3.0
 	github.com/lucasb-eyer/go-colorful v1.2.0
 	github.com/onsi/ginkgo v1.16.1
 	github.com/onsi/gomega v1.11.0

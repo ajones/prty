@@ -41,7 +41,8 @@ type PullRequest struct {
 	Deletions                  int
 	CodeDelta                  int
 
-	Importance float64
+	Importance       float64
+	ImportanceLookup map[string]float64
 
 	ViewedAt *time.Time
 }
@@ -123,6 +124,7 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 
 // All importance values are normilized to 0-100
 func (pr *PullRequest) calculateImportance(ds *Datasource) {
+	pr.ImportanceLookup = make(map[string]float64)
 	importance := 0.0
 
 	// TODOs:
@@ -138,50 +140,61 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 
 	// if this pr is abandoned then we dont need to look at it
 	if pr.IsAbandoned {
+		pr.ImportanceLookup["Abandoned"] = 0
 		return
 	}
 
 	// if I am not the author and it is approved we dont need to look at it
 	if !pr.IAmAuthor && pr.IsApproved {
+		pr.ImportanceLookup["Approved"] = 0
 		return
 	}
 
 	// if it is mine and approved we should go look at it
 	if pr.IAmAuthor && pr.IsApproved {
 		importance = math.MaxFloat64
+		pr.ImportanceLookup["Mine & approved"] = math.MaxFloat64
 		return
 	}
 
 	// if this pr is a draft push to the bottom
 	if pr.IsDraft {
 		pr.Importance = 1
+		pr.ImportanceLookup["Draft"] = 1
 		return
 	}
 
 	// if I am NOT the author
 	if !pr.IAmAuthor {
 		importance += 100
+		pr.ImportanceLookup["Not mine"] = 100
 	}
 
 	// if author is teammate add 50
 	if pr.AuthorIsTeammate {
 		importance += 100
+		pr.ImportanceLookup["Teammate"] = 100
 	}
 
 	// if the author is not a bot add 50
 	if !pr.AuthorIsBot {
 		importance += 100
+		pr.ImportanceLookup["Not bot"] = 100
 	}
 
 	// code delta
 	codeImp := (1 / (float64(pr.CodeDelta) + 100)) * 1000
-	importance += clampFloat(codeImp, 0, 100)
+	clampedCodeImp := clampFloat(codeImp, 0, 100)
+	importance += clampedCodeImp
+	pr.ImportanceLookup["Code delta"] = clampedCodeImp
 
 	// if I am NOT the author
 	if pr.Author != ds.config.GithubUsername {
 		revCount := float64(len(pr.RequestedReviewers))
 		imp := ((1 / (revCount + 5)) * 1000) * 0.5
-		importance += clampFloat(imp, 0, 100)
+		clampedImp := clampFloat(imp, 0, 100)
+		importance += clampedImp
+		pr.ImportanceLookup["Reviewers"] = clampedImp
 
 		// (100-POW(NUM_REQUESTED_REVIEWERS,2))
 		// importance += (100 - math.Pow(revCount, 2))
@@ -197,7 +210,9 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 		minSinceLastCommit := time.Now().Sub(pr.LastCommitTime) / time.Minute
 		// at 24 hrs day the importance is 100
 		imp := math.Pow(float64(minSinceLastCommit), 2) / 100000000
-		importance += clampFloat(imp, 0, 100)
+		clampedImp := clampFloat(imp, 0, 100)
+		importance += clampedImp
+		pr.ImportanceLookup["Recent changes"] = clampedImp
 
 		//((100/7500)*MIN_SINCE_LAST_COMMIT+50)
 		//importance += float64((100/7500)*minSinceLastCommit + 50)
@@ -208,7 +223,9 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 		minSinceLastComment := time.Now().Sub(pr.LastCommentTime) / time.Minute
 		// at 24 hrs day the importance is 100
 		imp := math.Pow(float64(minSinceLastComment), 2) / 100000000
-		importance += clampFloat(imp, 0, 100)
+		clampedImp := clampFloat(imp, 0, 100)
+		importance += clampedImp
+		pr.ImportanceLookup["Recent comment"] = clampedImp
 
 		//((600/7500)*MIN_SINCE_LAST_COMMENT+50)
 		//importance += float64((100/7500)*minSinceLastComment + 50)

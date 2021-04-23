@@ -170,6 +170,10 @@ var (
 			Foreground(white).
 			Background(purple)
 
+	// Detail sidebar
+	detailSideBarStyle = lipgloss.NewStyle().
+				Padding(0, 1)
+
 	// Page.
 
 	docStyle = lipgloss.NewStyle().Padding(1, 2, 1, 2)
