@@ -34,6 +34,7 @@ type PullRequest struct {
 	HasChangesAfterLastComment bool
 	LastCommentTime            time.Time
 	LastCommitTime             time.Time
+	FirstCommitTime            time.Time
 	IsApproved                 bool
 	IsAbandoned                bool
 	IsDraft                    bool
@@ -78,8 +79,18 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 		}
 	}
 
-	for i, c := range pr.Commits {
-		if i == 0 || pr.LastCommitTime.Before(*c.Commit.Committer.Date) {
+	for _, c := range pr.Commits {
+		if pr.FirstCommitTime.IsZero() {
+			pr.FirstCommitTime = *c.Commit.Committer.Date
+		}
+		if pr.LastCommitTime.IsZero() {
+			pr.LastCommitTime = *c.Commit.Committer.Date
+		}
+
+		if pr.FirstCommitTime.After(*c.Commit.Committer.Date) {
+			pr.FirstCommitTime = *c.Commit.Committer.Date
+		}
+		if pr.LastCommitTime.Before(*c.Commit.Committer.Date) {
 			pr.LastCommitTime = *c.Commit.Committer.Date
 		}
 	}
@@ -195,9 +206,6 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 		clampedImp := clampFloat(imp, 0, 100)
 		importance += clampedImp
 		pr.ImportanceLookup["Reviewers"] = clampedImp
-
-		// (100-POW(NUM_REQUESTED_REVIEWERS,2))
-		// importance += (100 - math.Pow(revCount, 2))
 	}
 
 	// removing for now. this seems to give a bad signal
@@ -208,27 +216,21 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	// min since last commit. if I am NOT the author
 	if pr.Author != ds.config.GithubUsername && pr.HasChangesAfterLastComment {
 		minSinceLastCommit := time.Now().Sub(pr.LastCommitTime) / time.Minute
-		// at 24 hrs day the importance is 100
-		imp := math.Pow(float64(minSinceLastCommit), 2) / 100000000
+		// at 48hrs hrs the importance is 100
+		imp := math.Pow(float64(minSinceLastCommit), 2) / 80000
 		clampedImp := clampFloat(imp, 0, 100)
 		importance += clampedImp
 		pr.ImportanceLookup["Recent changes"] = clampedImp
-
-		//((100/7500)*MIN_SINCE_LAST_COMMIT+50)
-		//importance += float64((100/7500)*minSinceLastCommit + 50)
 	}
 
 	// min since last comment if I AM the author
 	if pr.Author == ds.config.GithubUsername {
 		minSinceLastComment := time.Now().Sub(pr.LastCommentTime) / time.Minute
 		// at 24 hrs day the importance is 100
-		imp := math.Pow(float64(minSinceLastComment), 2) / 100000000
+		imp := math.Pow(float64(minSinceLastComment), 2) / 20000
 		clampedImp := clampFloat(imp, 0, 100)
 		importance += clampedImp
 		pr.ImportanceLookup["Recent comment"] = clampedImp
-
-		//((600/7500)*MIN_SINCE_LAST_COMMENT+50)
-		//importance += float64((100/7500)*minSinceLastComment + 50)
 	}
 
 	pr.Importance = importance

@@ -163,7 +163,7 @@ func BuildPRFooter(p PRViewData, viewWidth int, pr *datasource.PullRequest) stri
 		viewedIcon = prTagLeftStyle.Copy().Inherit(tagSuccessStyle).Render("OPENED")
 	}
 
-	age := time.Now().Sub(pr.LastCommitTime)
+	age := time.Now().Sub(pr.FirstCommitTime)
 	commitsCountTag := prTagLeftStyle.Copy().Render(fmt.Sprintf("Commits: %d", pr.NumCommits))
 	ageTag := prTagRightStyle.Copy().Render(fmt.Sprintf("Age %sh", formatDurationDayHour(age)))
 	orgRepoTag := prTagLeftStyle.Copy().
