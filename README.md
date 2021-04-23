@@ -24,7 +24,7 @@ $ ~/go/bin/prty
 ### Configuration 🛠
 PRTY creates a folder in your home directory where it stores configuration and data cache. After the first run of the application it will point you a file where you need to add some info. 
 
-You will need to create a github token that has repo read permission on the organizations and repositories that you wish to view.
+You will need to create a github token that has `repo` and `read:org` permissions.
 
 ```
 cat ~/.prty/conf.yaml

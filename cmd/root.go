@@ -294,7 +294,7 @@ func checkConfiguration() {
 	logPath, _ := config.GetLogFilePath()
 	moreInformationMessage := fmt.Sprintf("Debug information available at %s\nPlease review the README if you encounter any issues https://github.com/ajones/prty\n", logPath)
 
-	_, err = config.LoadConfig()
+	c, err := config.LoadConfig()
 	if err != nil {
 		fmt.Printf("%s\n%s", err, moreInformationMessage)
 		os.Exit(1)
@@ -306,6 +306,11 @@ func checkConfiguration() {
 		os.Exit(1)
 	}
 
+	err = datasource.CheckAccessToken(c.GithubAccessToken, c.GithubUsername)
+	if err != nil {
+		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		os.Exit(1)
+	}
 }
 
 func Execute() {
