@@ -43,6 +43,5 @@ func CheckAccessToken(tok string, userName string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-
 	return fmt.Errorf("Required scopes are [repo, org:read]. Did not find [%s].\nPlease re-issue a new token with the required scopes.", strings.Join(missing, ","))
 }

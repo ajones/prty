@@ -14,6 +14,7 @@ import (
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/logger"
 	"github.com/inburst/prty/stats"
+	"github.com/inburst/prty/tracking"
 	"github.com/inburst/prty/ui"
 	"github.com/inburst/prty/utils"
 )
@@ -136,6 +137,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statsView = &ui.Stats{
 				UserStats: m.stats,
 			}
+			tracking.SendMetric("view.stats")
 
 		case "up", "k":
 			if m.IsViewingSecondary() {
@@ -160,6 +162,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailView = &ui.PRDetail{
 				PR: p,
 			}
+			tracking.SendMetric("view.detail")
 
 		case "esc":
 			m.detailView = nil
@@ -297,23 +300,27 @@ func checkConfiguration() {
 	c, err := config.LoadConfig()
 	if err != nil {
 		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		tracking.SendMetric("confcheck.loadconfig.error")
 		os.Exit(1)
 	}
 
 	_, err = stats.LoadStats()
 	if err != nil {
 		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		tracking.SendMetric("confcheck.loadstats.error")
 		os.Exit(1)
 	}
 
 	err = datasource.CheckAccessToken(c.GithubAccessToken, c.GithubUsername)
 	if err != nil {
 		fmt.Printf("%s\n%s", err, moreInformationMessage)
+		tracking.SendMetric("confcheck.checkaccesstoken.error")
 		os.Exit(1)
 	}
 }
 
 func Execute() {
+	tracking.SendMetric("start")
 	checkConfiguration()
 	handleArguments()
 	startUI()

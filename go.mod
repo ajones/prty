@@ -3,6 +3,7 @@ module github.com/inburst/prty
 go 1.13
 
 require (
+	github.com/ajones/go-mixpanel v0.0.0-20210424051535-390f42e0fe8b
 	github.com/charmbracelet/bubbletea v0.13.2
 	github.com/charmbracelet/glamour v0.3.0
 	github.com/charmbracelet/lipgloss v0.1.2

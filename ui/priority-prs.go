@@ -7,6 +7,7 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/stats"
+	"github.com/inburst/prty/tracking"
 )
 
 /*
@@ -50,6 +51,7 @@ func (p *PriorityPRs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 
 	openbrowser(*pull.PR.HTMLURL)
 	stats.OnViewedPR(pull)
+	tracking.SendMetric("open.priority")
 }
 
 func (p *PriorityPRs) Clear() {

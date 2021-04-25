@@ -7,6 +7,7 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/stats"
+	"github.com/inburst/prty/tracking"
 )
 
 type ActivePRs struct {
@@ -45,6 +46,7 @@ func (p *ActivePRs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 
 	openbrowser(*pull.PR.HTMLURL)
 	stats.OnViewedPR(pull)
+	tracking.SendMetric("open.active")
 }
 
 func (p *ActivePRs) Clear() {

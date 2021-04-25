@@ -7,6 +7,7 @@ import (
 	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/stats"
+	"github.com/inburst/prty/tracking"
 )
 
 type BotsPrs struct {
@@ -37,6 +38,7 @@ func (p *BotsPrs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 
 	openbrowser(*pull.PR.HTMLURL)
 	stats.OnViewedPR(pull)
+	tracking.SendMetric("open.bots")
 }
 
 func (p *BotsPrs) Clear() {

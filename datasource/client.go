@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-github/v34/github"
 	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/logger"
+	"github.com/inburst/prty/tracking"
 	"golang.org/x/oauth2"
 )
 
@@ -89,13 +90,18 @@ func (ds *Datasource) loadSaveFile() map[string]*PullRequest {
 	prs := map[string]*PullRequest{}
 	cacheFilePath, err := config.GetPRCacheFilePath()
 	if err != nil {
+		tracking.SendMetric("data.loadcache.patherror")
 		return prs
 	}
 	data, err := ioutil.ReadFile(cacheFilePath)
 	if err != nil {
+		tracking.SendMetric("data.loadcache.readerror")
 		return prs
 	}
 	err = json.Unmarshal(data, &prs)
+	if err != nil {
+		tracking.SendMetric("data.loadcache.unmarshallerror")
+	}
 	return prs
 }
 
@@ -108,6 +114,8 @@ func (ds *Datasource) SaveToFile() {
 }
 
 func (ds *Datasource) RefreshData() {
+	tracking.SendMetric("data.refresh")
+
 	ds.currentlyRefreshing = true
 	ds.cachedPRs = ds.allPRs
 	ds.allPRs = map[string]*PullRequest{}
@@ -117,6 +125,7 @@ func (ds *Datasource) RefreshData() {
 	if err != nil {
 		ds.writeErrorStatus(err)
 		logger.Shared().Println(fmt.Sprintf("%s\n", err))
+		tracking.SendMetric("data.getorgs.error")
 		ds.currentlyRefreshing = false
 		return
 	}
@@ -135,6 +144,7 @@ func (ds *Datasource) RefreshData() {
 				if err != nil {
 					ds.writeErrorStatus(err)
 					logger.Shared().Println(fmt.Sprintf("%s\n", err))
+					tracking.SendMetric("data.getrepos.error")
 					ds.currentlyRefreshing = false
 					return
 				}
@@ -158,6 +168,7 @@ func (ds *Datasource) refreshRepo(orgName string, repoName string) {
 	if err != nil {
 		ds.writeErrorStatus(err)
 		logger.Shared().Println(fmt.Sprintf("%s\n", err))
+		tracking.SendMetric("data.getpulls.error")
 		return
 	}
 
@@ -178,6 +189,7 @@ func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.Pull
 		if err != nil {
 			ds.writeErrorStatus(err)
 			logger.Shared().Println(fmt.Sprintf("%s\n", err))
+			tracking.SendMetric("data.buildpr.error")
 			return
 		}
 		ds.mutex.Lock()
