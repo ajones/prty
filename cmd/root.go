@@ -47,6 +47,7 @@ type model struct {
 	statusMessage         string
 	remainingRequestsChan chan github.Rate
 	currentRateInfo       *github.Rate
+	totalPRs              int
 
 	ds           *datasource.Datasource
 	prUpdateChan chan *datasource.PullRequest
@@ -56,14 +57,23 @@ type model struct {
 
 var initialModel = model{
 	selectedTabIndex: 0,
-	tabNames:         []string{"Needs Attention", "Team", "Active", "Bots"},
+	tabNames: []string{
+		"Needs Attention",
+		"Team",
+		"Mine",
+		"Active",
+		"Bots",
+		"All",
+	},
 
 	nav: &ui.TabNav{},
 	views: []ui.PRViewData{
 		&ui.PriorityPRs{},
 		&ui.TeamPrs{},
+		&ui.MyPrs{},
 		&ui.ActivePRs{},
 		&ui.BotsPrs{},
+		&ui.AllPrs{},
 	},
 	footer: &ui.Footer{},
 
@@ -118,10 +128,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.IsViewingSecondary() {
 				break
 			}
-			m.refreshData()
 			for _, v := range m.views {
 				v.Clear()
 			}
+			m.refreshData()
 
 		case "s":
 			if m.IsViewingSecondary() {
@@ -213,6 +223,7 @@ func (m *model) sendSelectToActiveTab() {
 }
 
 func (m *model) refreshData() {
+	m.totalPRs = 0
 	go m.ds.RefreshData()
 }
 
@@ -239,7 +250,7 @@ func (m *model) View() string {
 		renderedPage.WriteString(ui.BuildPRView(v, width, bodyHeight, m.ds.IsCurrentlyRefreshingData()))
 	}
 	// Footer
-	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo))
+	renderedPage.WriteString(m.footer.BuildView(width, footerHeight, m.statusMessage, m.currentRateInfo, m.totalPRs))
 
 	return renderedPage.String()
 }
@@ -260,6 +271,7 @@ func (m *model) listenForRemainingRequests() {
 func (m *model) listenForPRChanges() {
 	for {
 		newPR := <-m.prUpdateChan
+		m.totalPRs++
 		for _, v := range m.views {
 			v.OnNewPullData(newPR)
 		}
@@ -267,6 +279,8 @@ func (m *model) listenForPRChanges() {
 }
 
 func startUI() {
+	tracking.SendMetric("start")
+
 	p := tea.NewProgram(&initialModel)
 	// Use the full size of the terminal in its "alternate screen buffer"
 	p.EnterAltScreen()
@@ -320,7 +334,6 @@ func checkConfiguration() {
 }
 
 func Execute() {
-	tracking.SendMetric("start")
 	checkConfiguration()
 	handleArguments()
 	startUI()

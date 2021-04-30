@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const PRTYVersion = "0.0.6"
+const PRTYVersion = "0.0.8"
 const AppCacheDirName = ".prty"
 const ConfFileName = "conf.yaml"
 const StatsFileName = "stats.json"

@@ -166,9 +166,17 @@ var (
 			Foreground(lightGrey).
 			Background(green)
 
-	tagSpecialStyle = tagStyle.Copy().
+	tagPurpleStyle = tagStyle.Copy().
 			Foreground(white).
 			Background(purple)
+
+	tagFusiaStyle = tagStyle.Copy().
+			Foreground(white).
+			Background(fusia)
+
+	tagBlueStyle = tagStyle.Copy().
+			Foreground(white).
+			Background(blue)
 
 	// Detail sidebar
 	detailSideBarStyle = lipgloss.NewStyle().
