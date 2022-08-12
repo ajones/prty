@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
+	"github.com/imdario/mergo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,6 +37,44 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
+	// load config from home folder
+	c, err := loadStandardConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// if there is a .prty/config.yaml file in the dir
+	// that the prty command is run from, use it as overrides
+	if overrides, err := loadRelativeConfigOverride(); err == nil {
+		mergo.Merge(c, overrides, mergo.WithOverride)
+	}
+	return c, nil
+}
+
+func loadRelativeConfigOverride() (*Config, error) {
+	// get the location the eecutable is being run from
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	exPath := filepath.Dir(ex)
+
+	// add the .prty/conf.yaml path
+	relativeConfigPath := filepath.Join(exPath, ".prty", ConfFileName)
+
+	c := &Config{}
+	data, err := ioutil.ReadFile(relativeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(data, c)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func loadStandardConfig() (*Config, error) {
 	err := checkAndCreateConfigFile()
 	if err != nil {
 		return nil, err
