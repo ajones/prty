@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"sync"
 
-	"github.com/google/go-github/v34/github"
+	"github.com/google/go-github/v53/github"
 	"github.com/inburst/prty/config"
 	"github.com/inburst/prty/logger"
 	"github.com/inburst/prty/tracking"
@@ -58,6 +59,7 @@ func (ds *Datasource) writeErrorStatus(err error) {
 
 func (ds *Datasource) writeStatus(message string) {
 	ds.statusChan <- message
+	logger.Shared().Printf("updating status %s\n", message)
 }
 
 func (ds *Datasource) SetStatusChan(statusChan chan<- string) {
@@ -120,46 +122,83 @@ func (ds *Datasource) RefreshData() {
 	ds.cachedPRs = ds.allPRs
 	ds.allPRs = map[string]*PullRequest{}
 
-	ds.writeStatus("fetching orgs...")
+	ds.writeStatus("fetching users orgs...")
 	orgs, err := GetAllOrgs()
 	if err != nil {
 		ds.writeErrorStatus(err)
-		logger.Shared().Println(fmt.Sprintf("%s\n", err))
+		logger.Shared().Printf("%s\n", err)
 		tracking.SendMetric("data.getorgs.error")
 		ds.currentlyRefreshing = false
 		return
 	}
 
+	ds.writeStatus("fetching users repos...")
 	for i := range orgs {
 		if orgs[i].Login != nil {
 			orgName := *orgs[i].Login
 			if listContains(ds.config.OrgBlacklist, orgName) {
+				logger.Shared().Printf("skipping due to blacklist %s\n", orgName)
+				continue
+			}
+			if len(ds.config.OrgWhitelist) != 0 && !listContains(ds.config.OrgWhitelist, orgName) {
+				logger.Shared().Printf("skipping due to missing in whitelist %s\n", orgName)
 				continue
 			}
 
-			if (len(ds.config.OrgWhitelist) == 0 || listContains(ds.config.OrgWhitelist, orgName)) &&
-				(len(ds.config.OrgBlacklist) == 0 || !listContains(ds.config.OrgBlacklist, orgName)) {
-				ds.writeStatus(fmt.Sprintf("%s fetching repos...", orgName))
-				repos, err := GetAllReposForOrg(orgName)
-				if err != nil {
-					ds.writeErrorStatus(err)
-					logger.Shared().Println(fmt.Sprintf("%s\n", err))
-					tracking.SendMetric("data.getrepos.error")
-					ds.currentlyRefreshing = false
-					return
+			ds.writeStatus(fmt.Sprintf("fetching repos for %s ...", orgName))
+
+			// publicRepos := map[string]bool{}
+			// for _, orgAndRepoName := range c.PublicRepos {
+			// 	repoParts := strings.Split(orgAndRepoName, "/")
+			// 	if len(repoParts) != 2 {
+			// 		logger.Shared().Printf("invalid public repo name: %s\n", orgAndRepoName)
+			// 		continue
+			// 	}
+			// 	orgName := repoParts[0]
+			// 	publicRepos[]
+			// }
+
+			repos, err := GetAllReposForOrg(orgName)
+			if err != nil {
+				ds.writeErrorStatus(err)
+				logger.Shared().Printf("%s\n", err)
+				tracking.SendMetric("data.getrepos.error")
+				ds.currentlyRefreshing = false
+				return
+			}
+
+			for _, repo := range repos {
+				repoName := *repo.Name
+				if len(ds.config.RepoWhitelist) != 0 && !listContains(ds.config.RepoWhitelist, repoName) {
+					logger.Shared().Printf("skipping due to whitelist %s:%s \n", orgName, repoName)
+					continue
+				}
+				if len(ds.config.RepoBlacklist) != 0 && listContains(ds.config.RepoBlacklist, repoName) {
+					logger.Shared().Printf("skipping due to blacklist %s:%s \n", orgName, repoName)
+					continue
 				}
 
-				for _, repo := range repos {
-					repoName := *repo.Name
-					if (len(ds.config.RepoWhitelist) == 0 || listContains(ds.config.RepoWhitelist, orgName)) &&
-						(len(ds.config.RepoBlacklist) == 0 || !listContains(ds.config.RepoBlacklist, orgName)) {
-						go ds.refreshRepo(orgName, repoName)
-					}
-				}
+				go ds.refreshRepo(orgName, repoName)
 			}
+
 		}
 	}
+
+	ds.writeStatus("fetching public repos...")
+	for _, orgAndRepoName := range ds.config.PublicRepos {
+		repoParts := strings.Split(orgAndRepoName, "/")
+		if len(repoParts) != 2 {
+			logger.Shared().Printf("invalid public repo name: %s\n", orgAndRepoName)
+			continue
+		}
+
+		orgName := repoParts[0]
+		repoName := repoParts[1]
+		go ds.refreshRepo(orgName, repoName)
+	}
+
 	ds.currentlyRefreshing = false
+	ds.writeStatus("refreshed")
 }
 
 func (ds *Datasource) refreshRepo(orgName string, repoName string) {
@@ -167,7 +206,7 @@ func (ds *Datasource) refreshRepo(orgName string, repoName string) {
 	prs, err := ds.GetAllPullsForRepoInOrg(orgName, repoName)
 	if err != nil {
 		ds.writeErrorStatus(err)
-		logger.Shared().Println(fmt.Sprintf("%s\n", err))
+		logger.Shared().Printf("%s\n", err)
 		tracking.SendMetric("data.getpulls.error")
 		return
 	}
@@ -188,7 +227,7 @@ func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.Pull
 		newPR, err := ds.BuildPullRequest(orgName, repoName, ghpr)
 		if err != nil {
 			ds.writeErrorStatus(err)
-			logger.Shared().Println(fmt.Sprintf("%s\n", err))
+			logger.Shared().Printf("%s\n", err)
 			tracking.SendMetric("data.buildpr.error")
 			return
 		}
