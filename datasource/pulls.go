@@ -10,8 +10,6 @@ import (
 	"github.com/inburst/prty/logger"
 )
 
-var currentPulls []*PullRequest = []*PullRequest{}
-
 type PullRequest struct {
 	PR               *github.PullRequest
 	Commits          []*github.RepositoryCommit
@@ -28,15 +26,19 @@ type PullRequest struct {
 	RequestedReviewers []string
 	NumCommits         int
 
+	FirstCommitTime time.Time
+	LastCommitTime  time.Time
+	LastCommentTime time.Time
+
 	IAmAuthor                  bool
 	AuthorIsTeammate           bool
 	AuthorIsBot                bool
 	HasChangesAfterLastComment bool
 	HasCommentsFromMe          bool
 	LastCommentFromMe          bool
-	LastCommentTime            time.Time
-	LastCommitTime             time.Time
-	FirstCommitTime            time.Time
+	TimeSinceLastComment       time.Duration
+	TimeSinceLastCommit        time.Duration
+	TimeSinceFirstCommit       time.Duration
 	IsApproved                 bool
 	IsAbandoned                bool
 	IsDraft                    bool
@@ -61,6 +63,8 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 	pr.Deletions = pr.PR.GetDeletions()
 	pr.CodeDelta = pr.Additions + pr.Deletions
 
+	logger.Shared().Printf("PR: %s/%s/%d  A:%d   D:%d\n", orgName, repoName, *pr.PR.Number, pr.Additions, pr.Deletions)
+
 	for _, n := range ds.config.TeamUsernames {
 		if n == pr.Author {
 			pr.AuthorIsTeammate = true
@@ -75,9 +79,12 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 		}
 	}
 
-	for i, c := range pr.Comments {
-		if i == 0 || pr.LastCommentTime.Before(*c.CreatedAt.GetTime()) {
-			pr.LastCommentTime = *c.CreatedAt.GetTime()
+	// Comments
+	// start the comment time at the PR creation time
+	lastCommentTime := *pr.PR.CreatedAt.GetTime()
+	for _, c := range pr.Comments {
+		if lastCommentTime.Before(*c.CreatedAt.GetTime()) {
+			lastCommentTime = *c.CreatedAt.GetTime()
 
 			// mark if the most recent comment is from me
 			if c.User.GetLogin() == ds.config.GithubUsername {
@@ -91,27 +98,32 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 			break
 		}
 	}
+	pr.LastCommentTime = lastCommentTime
+	pr.TimeSinceLastComment = time.Since(lastCommentTime)
 
+	// Commits
+	firstCommitTime := *pr.PR.CreatedAt.GetTime()
+	lastCommitTime := *pr.PR.CreatedAt.GetTime()
 	for _, c := range pr.Commits {
-		if pr.FirstCommitTime.IsZero() {
-			pr.FirstCommitTime = *c.Commit.Committer.Date.GetTime()
+		if firstCommitTime.After(*c.Commit.Committer.Date.GetTime()) {
+			firstCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
-		if pr.LastCommitTime.IsZero() {
-			pr.LastCommitTime = *c.Commit.Committer.Date.GetTime()
-		}
-
-		if pr.FirstCommitTime.After(*c.Commit.Committer.Date.GetTime()) {
-			pr.FirstCommitTime = *c.Commit.Committer.Date.GetTime()
-		}
-		if pr.LastCommitTime.Before(*c.Commit.Committer.Date.GetTime()) {
-			pr.LastCommitTime = *c.Commit.Committer.Date.GetTime()
+		if lastCommitTime.Before(*c.Commit.Committer.Date.GetTime()) {
+			lastCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
 	}
-	pr.IsAbandoned = time.Now().After(pr.LastCommitTime.Add(time.Duration(21) * time.Hour * time.Duration(24)))
+	pr.FirstCommitTime = firstCommitTime
+	pr.LastCommitTime = lastCommitTime
+	pr.TimeSinceLastCommit = time.Since(lastCommitTime)
+	pr.TimeSinceFirstCommit = time.Since(firstCommitTime)
+
+	// Abandoned
+	abandonThresholdTime := lastCommitTime.Add(time.Duration(21) * time.Hour * time.Duration(24))
+	pr.IsAbandoned = time.Now().After(abandonThresholdTime)
 
 	// clear viewed at if there are new changes
 	if pr.ViewedAt != nil {
-		if pr.LastCommitTime.After(*pr.ViewedAt) || pr.LastCommentTime.After(*pr.ViewedAt) {
+		if lastCommitTime.After(*pr.ViewedAt) || lastCommentTime.After(*pr.ViewedAt) {
 			pr.ViewedAt = nil
 		}
 	}
@@ -125,7 +137,7 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 	*/
 
 	// flag if we have unreviewed changes
-	if len(pr.Comments) == 0 || pr.LastCommentTime.Before(pr.LastCommitTime) {
+	if len(pr.Comments) == 0 || lastCommentTime.Before(lastCommitTime) {
 		pr.HasChangesAfterLastComment = true
 	}
 
@@ -223,7 +235,7 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	// min since last commit. if I am NOT the author but i have commented
 	// this is a high importance signal
 	if !pr.IAmAuthor && pr.HasCommentsFromMe {
-		minSinceLastCommit := time.Since(pr.LastCommitTime) / time.Minute
+		minSinceLastCommit := pr.TimeSinceLastCommit / time.Minute
 		// at 48hrs hrs the importance is 100
 		imp := math.Pow(float64(minSinceLastCommit), 2) / 80000
 		clampedImp := clampFloat(imp, 0, 250) // 250 pushes this signal up
@@ -233,7 +245,7 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 
 	// min since last commit. if I am NOT the author and I haven't commented
 	if !pr.IAmAuthor && !pr.HasCommentsFromMe {
-		minSinceLastCommit := time.Since(pr.LastCommitTime) / time.Minute
+		minSinceLastCommit := pr.TimeSinceLastCommit / time.Minute
 		// at 48hrs hrs the importance is 100
 		imp := math.Pow(float64(minSinceLastCommit), 2) / 80000
 		clampedImp := clampFloat(imp, 0, 50) // this should get looked at...
@@ -244,7 +256,7 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	// min since last comment if I AM the author
 	// i should rapidly respond to comments
 	if pr.IAmAuthor && !pr.LastCommentFromMe {
-		minSinceLastComment := time.Since(pr.LastCommentTime) / time.Minute
+		minSinceLastComment := pr.TimeSinceLastComment / time.Minute
 		// at 24 hrs day the importance is 100
 		imp := math.Pow(float64(minSinceLastComment), 2) / 20000
 		clampedImp := clampFloat(imp, 0, 300) // push this signal up high
@@ -266,21 +278,28 @@ func clampFloat(val float64, min float64, max float64) float64 {
 }
 
 func (ds *Datasource) UpdateExistingPr(org string, repo string, pr *PullRequest, ghpr *github.PullRequest) error {
-	pr.PR = ghpr
+	// Store a reference to the github PR on our envelope for easy access later
+	fullGHPR, err := ds.GetPull(org, repo, *ghpr.Number, *ghpr.Number)
+	if err != nil {
+		ds.writeErrorStatus(err)
+		return err
+	}
+	// ensure we have the latest extended PR info (additions/deletions)
+	pr.PR = fullGHPR
 
-	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching commits...", org, repo, *ghpr.Number))
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d updating commits...", org, repo, *ghpr.Number))
 	commits, lastCommitsPage, err := ds.GetAllCommitsForPull(org, repo, *ghpr.Number, pr.LastCommitsPage)
 	if err != nil {
 		ds.writeErrorStatus(err)
 		return err
 	}
-	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching comments...", org, repo, *ghpr.Number))
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d updating comments...", org, repo, *ghpr.Number))
 	comments, lastCommentsPage, err := ds.GetAllCommentsForPull(org, repo, *ghpr.Number, pr.LastCommentsPage)
 	if err != nil {
 		ds.writeErrorStatus(err)
 		return err
 	}
-	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching reviews...", org, repo, *ghpr.Number))
+	ds.writeStatus(fmt.Sprintf("%s/%s/#%d updating reviews...", org, repo, *ghpr.Number))
 	reviews, lastReviewsPage, err := ds.GetAllReviewsForPull(org, repo, *ghpr.Number, pr.LastReviewsPage)
 	if err != nil {
 		ds.writeErrorStatus(err)
@@ -339,6 +358,12 @@ func (ds *Datasource) UpdateExistingPr(org string, repo string, pr *PullRequest,
 }
 
 func (ds *Datasource) BuildPullRequest(org string, repo string, ghpr *github.PullRequest) (*PullRequest, error) {
+	fullGHPR, err := ds.GetPull(org, repo, *ghpr.Number, *ghpr.Number)
+	if err != nil {
+		ds.writeErrorStatus(err)
+		return nil, err
+	}
+
 	ds.writeStatus(fmt.Sprintf("%s/%s/#%d fetching commits...", org, repo, *ghpr.Number))
 	commits, lastCommitsPage, err := ds.GetAllCommitsForPull(org, repo, *ghpr.Number, 0)
 	if err != nil {
@@ -359,7 +384,7 @@ func (ds *Datasource) BuildPullRequest(org string, repo string, ghpr *github.Pul
 	}
 
 	newPR := &PullRequest{
-		PR:       ghpr,
+		PR:       fullGHPR,
 		Commits:  commits,
 		Comments: comments,
 		Reviews:  reviews,
@@ -380,11 +405,14 @@ func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) (
 		ListOptions: github.ListOptions{PerPage: 10},
 		State:       "open",
 	}
-	// get all pages of results
+	// page through to get all pulls for this repo
+	// NOTE: the returned PR data is not complete and needs to be directly fetched
+	// to hydrate fields like additions and deletions
 	var allPulls []*github.PullRequest
 	for {
 		logger.Shared().Printf("getting pulls for: [%s/%s] page:%d", orgName, repoName, opt.Page)
 		prs, resp, err := sharedClient().PullRequests.List(ctx, orgName, repoName, opt)
+
 		if _, ok := err.(*github.RateLimitError); ok {
 			logger.Shared().Printf("pulls for: [%s/%s] hit rate limit", orgName, repoName)
 			// TODO : add jitter
@@ -395,6 +423,7 @@ func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) (
 			logger.Shared().Printf("error getting pulls in [%s/%s] %s", orgName, repoName, err)
 			return allPulls, err
 		}
+
 		ds.remainingRequestsChan <- resp.Rate
 		allPulls = append(allPulls, prs...)
 		if resp.NextPage == 0 || opt.Page == resp.NextPage {
@@ -403,6 +432,12 @@ func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) (
 		opt.Page = resp.NextPage
 	}
 	return allPulls, nil
+}
+
+func (ds *Datasource) GetPull(org string, repo string, prNumber int, lastPage int) (*github.PullRequest, error) {
+	ctx := context.Background()
+	fullPR, _, err := sharedClient().PullRequests.Get(ctx, org, repo, prNumber)
+	return fullPR, err
 }
 
 func (ds *Datasource) GetAllCommitsForPull(org string, repo string, prNumber int, lastPage int) ([]*github.RepositoryCommit, int, error) {
@@ -447,7 +482,7 @@ func (ds *Datasource) GetAllCommentsForPull(org string, repo string, prNumber in
 	// get all pages of results
 	var allComments []*github.PullRequestComment
 	for {
-		logger.Shared().Println(fmt.Sprintf("comments: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Printf("comments: %s/%s/%d p:%d", org, repo, prNumber, opt.Page)
 		comments, resp, err := sharedClient().PullRequests.ListComments(ctx, org, repo, prNumber, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
 			logger.Shared().Println("comments: hit rate limit")
@@ -455,7 +490,7 @@ func (ds *Datasource) GetAllCommentsForPull(org string, repo string, prNumber in
 			continue
 		}
 		if err != nil {
-			logger.Shared().Println(fmt.Sprintf("comments: error %s", err))
+			logger.Shared().Printf("comments: error %s", err)
 			return allComments, lastPage, err
 		}
 		ds.remainingRequestsChan <- resp.Rate
@@ -481,7 +516,7 @@ func (ds *Datasource) GetAllReviewsForPull(org string, repo string, prNumber int
 	// get all pages of results
 	var allReviews []*github.PullRequestReview
 	for {
-		logger.Shared().Println(fmt.Sprintf("reviews: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Printf("reviews: %s/%s/%d p:%d", org, repo, prNumber, opt.Page)
 		reviews, resp, err := sharedClient().PullRequests.ListReviews(ctx, org, repo, prNumber, nil)
 		if _, ok := err.(*github.RateLimitError); ok {
 			logger.Shared().Println("reviews: hit rate limit")
@@ -489,7 +524,7 @@ func (ds *Datasource) GetAllReviewsForPull(org string, repo string, prNumber int
 			continue
 		}
 		if err != nil {
-			logger.Shared().Println(fmt.Sprintf("reviews: error %s", err))
+			logger.Shared().Printf("reviews: error %s", err)
 			return allReviews, lastPage, err
 		}
 		allReviews = append(allReviews, reviews...)

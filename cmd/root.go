@@ -173,6 +173,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				PR: p,
 			}
 			tracking.SendMetric("view.detail")
+			m.stats.OnViewPR(p)
 
 		case "esc":
 			m.detailView = nil

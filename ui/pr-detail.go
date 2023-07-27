@@ -34,17 +34,36 @@ func (p *PRDetail) BuildView(viewWidth int, viewHeight int) string {
 	doc := strings.Builder{}
 	h := lipgloss.Height
 
-	title := pullListStyle.Copy().Inherit(titleStyle).Width(viewWidth).Render(p.PR.PR.GetTitle()) + "\n"
-	doc.WriteString(title)
+	// Begin Title Bar
+	additionsStr := fmt.Sprintf("+%d", p.PR.Additions)
+	deletionsStr := fmt.Sprintf("-%d", p.PR.Deletions)
+	additionsWidth := len(additionsStr)
+	deletionsWidth := len(deletionsStr)
+	codeDeltaTotalWidth := additionsWidth + deletionsWidth + 4 // +4 for the padding between blocks
 
+	prTitleBlock := prTitleStyle.Copy().Inherit(titleStyle).Width(viewWidth - codeDeltaTotalWidth).Render(p.PR.PR.GetTitle())
+	additionsBlock := prAdditionsAndDeletionsStyle.Copy().Foreground(lipgloss.Color("#00FF00")).Width(additionsWidth).Render(additionsStr)
+	deletionsBlock := prAdditionsAndDeletionsStyle.Copy().Foreground(lipgloss.Color("#FF0000")).Width(deletionsWidth).Render(deletionsStr)
+
+	titleBar := lipgloss.JoinHorizontal(lipgloss.Top,
+		prTitleBlock,
+		additionsBlock,
+		deletionsBlock,
+	)
+	doc.WriteString(titleBar + "\n")
+	// End Title Bar
+
+	// Begin PR Markdown Body
 	r, _ := glamour.NewTermRenderer(
 		// detect background color and pick either the default dark or light theme
 		glamour.WithStandardStyle("dark"),
 		// wrap output at specific width
 		//glamour.WithWordWrap(viewWidth-20),
 	)
-	out, _ := r.Render(p.PR.PR.GetBody())
+	markdownBody, _ := r.Render(p.PR.PR.GetBody())
+	// End PR Markdown Body
 
+	// Begin Importance Display
 	entries := []importanceEntry{}
 	for k, v := range p.PR.ImportanceLookup {
 		entries = append(entries, importanceEntry{
@@ -52,12 +71,21 @@ func (p *PRDetail) BuildView(viewWidth int, viewHeight int) string {
 			value: v,
 		})
 	}
+
 	sort.Sort(importanceEntryByImportance(entries))
-	keys := []string{}
-	values := []string{}
+	keys := []string{
+		detailSideBarStyle.Copy().Render("Importance"),
+		detailSideBarStyle.Copy().Render(""), // blank line
+		detailSideBarStyle.Copy().Render("Breakdown:"),
+	}
+	values := []string{
+		detailSideBarStyle.Copy().Render(fmt.Sprintf("%.0f", p.PR.Importance)),
+		detailSideBarStyle.Copy().Render(""), // blank line
+		detailSideBarStyle.Copy().Render(""), // blank line
+	}
 	for i := range entries {
 		keys = append(keys, detailSideBarStyle.Copy().Render(entries[i].name))
-		values = append(values, detailSideBarStyle.Copy().Render(fmt.Sprintf("%0.2f", entries[i].value)))
+		values = append(values, detailSideBarStyle.Copy().Render(fmt.Sprintf("%.0f", entries[i].value)))
 	}
 
 	importanceList := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -68,16 +96,35 @@ func (p *PRDetail) BuildView(viewWidth int, viewHeight int) string {
 			values...,
 		),
 	)
+	// End Importance Display
 
-	sideBarWidth := 25
-	view := lipgloss.NewStyle().Copy().Render(
+	importanceBreakdownWidth := 25
+
+	markDownBodyBlock := lipgloss.NewStyle().
+		Width(viewWidth-importanceBreakdownWidth).
+		MaxWidth(viewWidth-importanceBreakdownWidth).
+		Height(viewHeight-h(titleBar)).
+		Render(markdownBody) + "\n"
+
+	importanceBodyBlock := lipgloss.NewStyle().
+		Padding(1, 1, 1, 1).
+		Width(importanceBreakdownWidth).
+		MaxWidth(importanceBreakdownWidth).
+		Height(viewHeight-h(titleBar)).
+		Render(importanceList) + "\n"
+
+	bodyBlock := lipgloss.NewStyle().Copy().Render(
 		lipgloss.JoinHorizontal(lipgloss.Top,
-			lipgloss.NewStyle().Width(viewWidth-sideBarWidth).MaxWidth(viewWidth-sideBarWidth).Height(viewHeight-h(title)).Render(out),
-			lipgloss.NewStyle().Width(sideBarWidth).MaxWidth(sideBarWidth).Height(viewHeight-h(title)).Render(importanceList)))
+			markDownBodyBlock,
+			importanceBodyBlock,
+		))
 
-	doc.WriteString(lipgloss.NewStyle().MaxHeight(viewHeight-h(title)).Height(viewHeight-h(title)).Render(view) + "\n")
+	renderedBody := lipgloss.NewStyle().
+		MaxHeight(viewHeight - h(titleBar)).
+		Height(viewHeight - h(titleBar)).
+		Render(bodyBlock)
 
-	// TODO : add last comment and last commit to view
+	doc.WriteString(renderedBody)
 
 	return lipgloss.NewStyle().MaxWidth(viewWidth).Render(doc.String()) + "\n"
 }

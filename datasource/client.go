@@ -217,6 +217,10 @@ func (ds *Datasource) refreshRepo(orgName string, repoName string) {
 }
 
 func (ds *Datasource) buildPr(orgName string, repoName string, ghpr *github.PullRequest) {
+
+	// Note: PRs that are sourced from the /list api will not contain all desired
+	// fields including additions and deletions
+
 	if existingPr, ok := ds.cachedPRs[ghpr.GetNodeID()]; ok {
 		ds.UpdateExistingPr(orgName, repoName, existingPr, ghpr)
 		ds.mutex.Lock()
