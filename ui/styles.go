@@ -9,18 +9,19 @@ var (
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 
-	pink       = lipgloss.Color("#FFACFC")
-	fusia      = lipgloss.Color("#F148FB")
-	blue       = lipgloss.Color("#7122FA")
-	purple     = lipgloss.Color("#560A86")
-	green      = lipgloss.Color("#80ED99")
-	red        = lipgloss.Color("#FF5F87")
-	white      = lipgloss.Color("#FAFAFA")
-	black      = lipgloss.Color("#000000")
-	lightGrey  = lipgloss.Color("#383838")
-	grey       = lipgloss.Color("#303030")
-	darkGrey   = lipgloss.Color("#282828")
-	darkerGrey = lipgloss.Color("#111111")
+	pink        = lipgloss.Color("#FFACFC")
+	fusia       = lipgloss.Color("#F148FB")
+	blue        = lipgloss.Color("#7122FA")
+	purple      = lipgloss.Color("#560A86")
+	green       = lipgloss.Color("#80ED99")
+	red         = lipgloss.Color("#FF5F87")
+	white       = lipgloss.Color("#FAFAFA")
+	black       = lipgloss.Color("#000000")
+	lightGrey   = lipgloss.Color("#383838")
+	grey        = lipgloss.Color("#303030")
+	darkGrey    = lipgloss.Color("#282828")
+	darkerGrey  = lipgloss.Color("#222222")
+	darkestGrey = lipgloss.Color("#111111")
 
 	divider = lipgloss.NewStyle().
 		SetString("•").
@@ -133,6 +134,16 @@ var (
 	pullPositionStyle = lipgloss.NewStyle().
 				Align(lipgloss.Right).
 				Padding(0, 1)
+
+	prTitleStyle = lipgloss.NewStyle().
+			Align(lipgloss.Left).
+			Background(lightGrey).
+			Padding(1, 1, 1, 1)
+
+	prAdditionsAndDeletionsStyle = lipgloss.NewStyle().
+					Align(lipgloss.Left).
+					Background(lightGrey).
+					Padding(1, 1, 1, 1)
 
 	pullListStyle = lipgloss.NewStyle().
 			Align(lipgloss.Left).

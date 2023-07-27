@@ -149,7 +149,7 @@ func BuildPRFooter(p PRViewData, viewWidth int, pr *datasource.PullRequest) stri
 	if pr.IsApproved {
 		statusTag = prTagLeftStyle.Copy().Inherit(tagSuccessStyle).Render("APPROVED")
 	} else if pr.IsAbandoned {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Render("ABANDONED 💀")
+		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Background(darkerGrey).Render("ABANDONED 💀")
 	} else if pr.IsDraft {
 		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Render("DRAFT")
 	} else if pr.HasChangesAfterLastComment {

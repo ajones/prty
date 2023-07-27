@@ -37,7 +37,7 @@ func (p *AllPrs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 	pull.ViewedAt = &now
 
 	openbrowser(*pull.PR.HTMLURL)
-	stats.OnViewedPR(pull)
+	stats.OnOpenPR(pull)
 	tracking.SendMetric("open.all")
 }
 

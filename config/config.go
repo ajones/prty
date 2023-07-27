@@ -18,6 +18,7 @@ const ConfFileName = "conf.yaml"
 const StatsFileName = "stats.json"
 const PRCacheFileName = "prs.json"
 const LogFileName = "prty.log"
+const TrainingDataFileName = "training.json"
 const DefaultGithubToken = "token with repo read permission"
 const DefaultGithubUserName = "your github username"
 
@@ -212,4 +213,8 @@ func GetPRCacheFilePath() (string, error) {
 
 func GetLogFilePath() (string, error) {
 	return buildScopedPathFor(LogFileName)
+}
+
+func GetTrainingFilePath() (string, error) {
+	return buildScopedPathFor(TrainingDataFileName)
 }

@@ -43,5 +43,5 @@ func (f *Footer) BuildView(viewWidth int, viewHeight int, statusMsg string, rate
 
 	doc.WriteString(lipgloss.NewStyle().Width(viewWidth).Render(bar))
 
-	return lipgloss.NewStyle().Background(darkerGrey).Height(viewHeight).Render(doc.String())
+	return lipgloss.NewStyle().Background(darkestGrey).Height(viewHeight).Render(doc.String())
 }

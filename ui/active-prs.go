@@ -15,7 +15,7 @@ type ActivePRs struct {
 }
 
 func (p *ActivePRs) OnNewPullData(pr *datasource.PullRequest) {
-	activeWindow := 60 // things updated with 48 hours are considered active add a bit to spread over the weekend
+	activeWindow := (24 * 2) + 12 // things updated with 48 hours are considered active add a bit to spread over the weekend
 
 	mostRecentActivityTime := pr.LastCommitTime
 	if pr.LastCommentTime.After(pr.LastCommitTime) {
@@ -45,7 +45,7 @@ func (p *ActivePRs) OnSelect(cursor CursorPos, stats *stats.Stats) {
 	pull.ViewedAt = &now
 
 	openbrowser(*pull.PR.HTMLURL)
-	stats.OnViewedPR(pull)
+	stats.OnOpenPR(pull)
 	tracking.SendMetric("open.active")
 }
 
