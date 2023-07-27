@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/google/go-github/v34/github"
+	"github.com/google/go-github/v53/github"
 	"github.com/inburst/prty/logger"
 )
 
@@ -32,6 +32,8 @@ type PullRequest struct {
 	AuthorIsTeammate           bool
 	AuthorIsBot                bool
 	HasChangesAfterLastComment bool
+	HasCommentsFromMe          bool
+	LastCommentFromMe          bool
 	LastCommentTime            time.Time
 	LastCommitTime             time.Time
 	FirstCommitTime            time.Time
@@ -74,24 +76,35 @@ func (pr *PullRequest) calculateStatusFields(orgName string, repoName string, ds
 	}
 
 	for i, c := range pr.Comments {
-		if i == 0 || pr.LastCommentTime.Before(*c.CreatedAt) {
-			pr.LastCommentTime = *c.CreatedAt
+		if i == 0 || pr.LastCommentTime.Before(*c.CreatedAt.GetTime()) {
+			pr.LastCommentTime = *c.CreatedAt.GetTime()
+
+			// mark if the most recent comment is from me
+			if c.User.GetLogin() == ds.config.GithubUsername {
+				pr.LastCommentFromMe = true
+			}
+		}
+
+		// mark if I have commented on this PR
+		if c.User.GetLogin() == ds.config.GithubUsername {
+			pr.HasCommentsFromMe = true
+			break
 		}
 	}
 
 	for _, c := range pr.Commits {
 		if pr.FirstCommitTime.IsZero() {
-			pr.FirstCommitTime = *c.Commit.Committer.Date
+			pr.FirstCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
 		if pr.LastCommitTime.IsZero() {
-			pr.LastCommitTime = *c.Commit.Committer.Date
+			pr.LastCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
 
-		if pr.FirstCommitTime.After(*c.Commit.Committer.Date) {
-			pr.FirstCommitTime = *c.Commit.Committer.Date
+		if pr.FirstCommitTime.After(*c.Commit.Committer.Date.GetTime()) {
+			pr.FirstCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
-		if pr.LastCommitTime.Before(*c.Commit.Committer.Date) {
-			pr.LastCommitTime = *c.Commit.Committer.Date
+		if pr.LastCommitTime.Before(*c.Commit.Committer.Date.GetTime()) {
+			pr.LastCommitTime = *c.Commit.Committer.Date.GetTime()
 		}
 	}
 	pr.IsAbandoned = time.Now().After(pr.LastCommitTime.Add(time.Duration(21) * time.Hour * time.Duration(24)))
@@ -139,23 +152,16 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	importance := 0.0
 
 	// TODOs:
-
-	// split score out per step for introspection
-
 	// add importance if i am CODEOWNER
-	// If not author, already replied, and not yet re-requested: pr.Importance=4
-	// If author, and no one has reviewed: pr.Importance=4
-	// "Interesting PRs": pr.Importance=5
-
 	// Sort by most recent activity first.
 
-	// if this pr is abandoned then we dont need to look at it
+	// if this pr is abandoned then we don't need to look at it
 	if pr.IsAbandoned {
 		pr.ImportanceLookup["Abandoned"] = 0
 		return
 	}
 
-	// if I am not the author and it is approved we dont need to look at it
+	// if I am not the author and it is approved we don't need to look at it
 	if !pr.IAmAuthor && pr.IsApproved {
 		pr.ImportanceLookup["Approved"] = 0
 		return
@@ -164,7 +170,7 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	// if it is mine and approved we should go look at it
 	if pr.IAmAuthor && pr.IsApproved {
 		importance = math.MaxFloat64
-		pr.ImportanceLookup["Mine & approved"] = math.MaxFloat64
+		pr.ImportanceLookup["Ready"] = math.MaxFloat64
 		return
 	}
 
@@ -187,20 +193,21 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 		pr.ImportanceLookup["Teammate"] = 100
 	}
 
-	// if the author is not a bot add 50
-	if !pr.AuthorIsBot {
-		importance += 100
-		pr.ImportanceLookup["Not bot"] = 100
+	// if the author is not a bot subtract 50
+	if pr.AuthorIsBot {
+		importance -= 50
+		pr.ImportanceLookup["Not bot"] = -50
 	}
 
-	// code delta
+	// More lines of code changed, the less important.
+	// THis is clamped between 0 and 100
 	codeImp := (1 / (float64(pr.CodeDelta) + 100)) * 1000
 	clampedCodeImp := clampFloat(codeImp, 0, 100)
 	importance += clampedCodeImp
 	pr.ImportanceLookup["Code delta"] = clampedCodeImp
 
-	// if I am NOT the author
-	if pr.Author != ds.config.GithubUsername {
+	// more requested reviewers the less important
+	if !pr.IAmAuthor {
 		revCount := float64(len(pr.RequestedReviewers))
 		imp := ((1 / (revCount + 5)) * 1000) * 0.5
 		clampedImp := clampFloat(imp, 0, 100)
@@ -213,22 +220,34 @@ func (pr *PullRequest) calculateImportance(ds *Datasource) {
 	//prAgeMin := time.Now().Sub(*pr.PR.CreatedAt) / time.Minute
 	//importance += float64(((50 / 7500) * prAgeMin) + 25)
 
-	// min since last commit. if I am NOT the author
-	if pr.Author != ds.config.GithubUsername && pr.HasChangesAfterLastComment {
-		minSinceLastCommit := time.Now().Sub(pr.LastCommitTime) / time.Minute
+	// min since last commit. if I am NOT the author but i have commented
+	// this is a high importance signal
+	if !pr.IAmAuthor && pr.HasCommentsFromMe {
+		minSinceLastCommit := time.Since(pr.LastCommitTime) / time.Minute
 		// at 48hrs hrs the importance is 100
 		imp := math.Pow(float64(minSinceLastCommit), 2) / 80000
-		clampedImp := clampFloat(imp, 0, 100)
+		clampedImp := clampFloat(imp, 0, 250) // 250 pushes this signal up
+		importance += clampedImp
+		pr.ImportanceLookup["Change replies"] = clampedImp
+	}
+
+	// min since last commit. if I am NOT the author and I haven't commented
+	if !pr.IAmAuthor && !pr.HasCommentsFromMe {
+		minSinceLastCommit := time.Since(pr.LastCommitTime) / time.Minute
+		// at 48hrs hrs the importance is 100
+		imp := math.Pow(float64(minSinceLastCommit), 2) / 80000
+		clampedImp := clampFloat(imp, 0, 50) // this should get looked at...
 		importance += clampedImp
 		pr.ImportanceLookup["Recent changes"] = clampedImp
 	}
 
 	// min since last comment if I AM the author
-	if pr.Author == ds.config.GithubUsername {
-		minSinceLastComment := time.Now().Sub(pr.LastCommentTime) / time.Minute
+	// i should rapidly respond to comments
+	if pr.IAmAuthor && !pr.LastCommentFromMe {
+		minSinceLastComment := time.Since(pr.LastCommentTime) / time.Minute
 		// at 24 hrs day the importance is 100
 		imp := math.Pow(float64(minSinceLastComment), 2) / 20000
-		clampedImp := clampFloat(imp, 0, 100)
+		clampedImp := clampFloat(imp, 0, 300) // push this signal up high
 		importance += clampedImp
 		pr.ImportanceLookup["Recent comment"] = clampedImp
 	}
@@ -364,15 +383,16 @@ func (ds *Datasource) GetAllPullsForRepoInOrg(orgName string, repoName string) (
 	// get all pages of results
 	var allPulls []*github.PullRequest
 	for {
-		logger.Shared().Println(fmt.Sprintf("pulls: %s/%s p:%d", orgName, repoName, opt.Page))
+		logger.Shared().Printf("getting pulls for: [%s/%s] page:%d", orgName, repoName, opt.Page)
 		prs, resp, err := sharedClient().PullRequests.List(ctx, orgName, repoName, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
-			logger.Shared().Println("pulls: hit rate limit")
+			logger.Shared().Printf("pulls for: [%s/%s] hit rate limit", orgName, repoName)
+			// TODO : add jitter
 			time.Sleep(time.Duration(5) * time.Second)
 			continue
 		}
 		if err != nil {
-			logger.Shared().Println(fmt.Sprintf("pulls: error %s", err))
+			logger.Shared().Printf("error getting pulls in [%s/%s] %s", orgName, repoName, err)
 			return allPulls, err
 		}
 		ds.remainingRequestsChan <- resp.Rate
@@ -394,7 +414,7 @@ func (ds *Datasource) GetAllCommitsForPull(org string, repo string, prNumber int
 	// get all pages of results
 	var allCommits []*github.RepositoryCommit
 	for {
-		logger.Shared().Println(fmt.Sprintf("commits: %s/%s/%d p:%d", org, repo, prNumber, opt.Page))
+		logger.Shared().Printf("commits: %s/%s/%d p:%d", org, repo, prNumber, opt.Page)
 		commits, resp, err := sharedClient().PullRequests.ListCommits(ctx, org, repo, prNumber, opt)
 		if _, ok := err.(*github.RateLimitError); ok {
 			logger.Shared().Println("commits: hit rate limit")
@@ -402,7 +422,7 @@ func (ds *Datasource) GetAllCommitsForPull(org string, repo string, prNumber int
 			continue
 		}
 		if err != nil {
-			logger.Shared().Println(fmt.Sprintf("commits: error %s", err))
+			logger.Shared().Printf("commits: error %s", err)
 			return allCommits, lastPage, err
 		}
 		ds.remainingRequestsChan <- resp.Rate

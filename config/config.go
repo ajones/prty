@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const PRTYVersion = "0.0.8"
+const PRTYVersion = "0.0.9"
 const AppCacheDirName = ".prty"
 const ConfFileName = "conf.yaml"
 const StatsFileName = "stats.json"
@@ -23,6 +23,8 @@ const DefaultGithubUserName = "your github username"
 
 type Config struct {
 	ConfigVersion int `yaml:"ConfigVersion"`
+
+	PublicRepos []string `yaml:"PublicRepos"`
 
 	GithubAccessToken string   `yaml:"GithubAccessToken"`
 	OrgWhitelist      []string `yaml:"OrgWhitelist"`
