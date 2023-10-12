@@ -41,7 +41,7 @@ func (p *PRDetail) BuildView(viewWidth int, viewHeight int) string {
 	deletionsWidth := len(deletionsStr)
 	codeDeltaTotalWidth := additionsWidth + deletionsWidth + 4 // +4 for the padding between blocks
 
-	prTitleBlock := prTitleStyle.Copy().Inherit(titleStyle).Width(viewWidth - codeDeltaTotalWidth).Render(p.PR.PR.GetTitle())
+	prTitleBlock := prTitleStyle.Copy().Inherit(titleStyle).Width(viewWidth - codeDeltaTotalWidth).Render(p.PR.GithubPR.GetTitle())
 	additionsBlock := prAdditionsAndDeletionsStyle.Copy().Foreground(lipgloss.Color("#00FF00")).Width(additionsWidth).Render(additionsStr)
 	deletionsBlock := prAdditionsAndDeletionsStyle.Copy().Foreground(lipgloss.Color("#FF0000")).Width(deletionsWidth).Render(deletionsStr)
 
@@ -60,7 +60,7 @@ func (p *PRDetail) BuildView(viewWidth int, viewHeight int) string {
 		// wrap output at specific width
 		//glamour.WithWordWrap(viewWidth-20),
 	)
-	markdownBody, _ := r.Render(p.PR.PR.GetBody())
+	markdownBody, _ := r.Render(p.PR.GithubPR.GetBody())
 	// End PR Markdown Body
 
 	// Begin Importance Display

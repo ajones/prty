@@ -26,7 +26,7 @@ func InitializeLogger() error {
 		return err
 	}
 
-	sharedLogger = log.New(f, "prty", log.LstdFlags)
+	sharedLogger = log.New(f, "prty ", log.LstdFlags)
 	return nil
 }
 

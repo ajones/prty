@@ -17,6 +17,10 @@ const AppCacheDirName = ".prty"
 const ConfFileName = "conf.yaml"
 const StatsFileName = "stats.json"
 const PRCacheFileName = "prs.json"
+const EventsCacheFileName = "events.json"
+const ReposCacheFileName = "repos.json"
+const OrgsCacheFileName = "orgs.json"
+const IssuesCacheFileName = "issues.json"
 const LogFileName = "prty.log"
 const TrainingDataFileName = "training.json"
 const DefaultGithubToken = "token with repo read permission"
@@ -217,4 +221,20 @@ func GetLogFilePath() (string, error) {
 
 func GetTrainingFilePath() (string, error) {
 	return buildScopedPathFor(TrainingDataFileName)
+}
+
+func GetEventsCacheFilePath() (string, error) {
+	return buildScopedPathFor(EventsCacheFileName)
+}
+
+func GetReposCacheFilePath() (string, error) {
+	return buildScopedPathFor(ReposCacheFileName)
+}
+
+func GetOrgsCacheFilePath() (string, error) {
+	return buildScopedPathFor(OrgsCacheFileName)
+}
+
+func GetIssuesCacheFilePath() (string, error) {
+	return buildScopedPathFor(IssuesCacheFileName)
 }

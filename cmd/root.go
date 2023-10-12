@@ -154,14 +154,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			v := m.views[m.cursor.X]
-			v.OnCursorMove(0, -1)
+			v.OnCursorMove(0, -1, m.stats)
 
 		case "down", "j":
 			if m.IsViewingSecondary() {
 				break
 			}
 			v := m.views[m.cursor.X]
-			v.OnCursorMove(0, 1)
+			v.OnCursorMove(0, 1, m.stats)
 
 		case "d":
 			if m.IsViewingSecondary() {
@@ -173,7 +173,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				PR: p,
 			}
 			tracking.SendMetric("view.detail")
-			m.stats.OnViewPR(p)
+			v.OnViewDetails(m.cursor, m.stats)
 
 		case "esc":
 			m.detailView = nil
@@ -220,7 +220,7 @@ func tick() tea.Cmd {
 func (m *model) sendSelectToActiveTab() {
 	v := m.views[m.cursor.X]
 	v.OnSelect(m.cursor, m.stats)
-	m.ds.SaveToFile()
+	m.ds.SavePRCacheToFile()
 }
 
 func (m *model) refreshData() {

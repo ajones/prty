@@ -117,18 +117,18 @@ var (
 	prStyle = lipgloss.NewStyle().
 		Background(lightGrey)
 
-	prTagStyle = prStyle.Copy().
+	prTagSpacerStyle = lipgloss.NewStyle().
+				Background(darkGrey)
+
+	prTagStyle = lipgloss.NewStyle().
 			Background(darkGrey).
-			Width(20).
 			Padding(0, 1)
 
 	prTagLeftStyle = prTagStyle.Copy().
-			Inherit(prTagStyle).
-			Padding(0, 1)
+			Inherit(prTagStyle)
 
 	prTagRightStyle = prTagStyle.Copy().
 			Inherit(prTagStyle).
-			Padding(0, 1).
 			Align(lipgloss.Right)
 
 	pullPositionStyle = lipgloss.NewStyle().
@@ -167,6 +167,7 @@ var (
 	// Tag
 	tagStyle = lipgloss.NewStyle().
 			Padding(0, 1).
+			Background(darkGrey).
 			Align(lipgloss.Center)
 
 	tagAlertStyle = tagStyle.Copy().

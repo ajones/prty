@@ -34,18 +34,18 @@ func GithubGet() {
 				continue
 			}
 			if len(orgWhitelist) == 0 || listContains(orgWhitelist, orgName) {
-				repos, _ := GetAllReposForOrg(orgName)
-				for i, r := range repos {
-					fmt.Printf("%d %s -- %s\n", i, orgName, *r.Name)
-					/*
-						prs, _, err := client.PullRequests.List(ctx, orgName, *r.Name, nil)
-						if err != nil {
-							fmt.Printf("%s", err)
-						} else {
-							fmt.Printf("%s -- %s prs: %d\n", orgName, *r.Name, len(prs))
-						}
-					*/
-				}
+				// repos, _ := GetAllReposForOrg(orgName)
+				// for i, r := range repos {
+				// 	fmt.Printf("%d %s -- %s\n", i, orgName, *r.Name)
+				// 	/*
+				// 		prs, _, err := client.PullRequests.List(ctx, orgName, *r.Name, nil)
+				// 		if err != nil {
+				// 			fmt.Printf("%s", err)
+				// 		} else {
+				// 			fmt.Printf("%s -- %s prs: %d\n", orgName, *r.Name, len(prs))
+				// 		}
+				// 	*/
+				// }
 			}
 		}
 	}

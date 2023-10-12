@@ -6,9 +6,25 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cznic/mathutil"
 	"github.com/inburst/prty/datasource"
 	"github.com/inburst/prty/stats"
+	"github.com/inburst/prty/tracking"
 	"github.com/lucasb-eyer/go-colorful"
+)
+
+// This is to prevent the UI from getting too slow when rendering a large number
+// of PRs
+// TODO: this should be driven by the size of the terminal not a hardcoded value
+const MaxRenderedPRs = 50
+
+type PRInteractionState string
+
+const (
+	PRInteractionStateNone     PRInteractionState = ""
+	PRInteractionStateSelected PRInteractionState = "selected"
+	PRInteractionStateViewed   PRInteractionState = "viewed"
+	PRInteractionStateOpened   PRInteractionState = "opened"
 )
 
 type PRViewData interface {
@@ -20,7 +36,8 @@ type PRViewData interface {
 	OnSort()
 	Clear()
 	OnSelect(cursor CursorPos, stats *stats.Stats)
-	OnCursorMove(moxedX int, movedY int) bool
+	OnViewDetails(cursor CursorPos, stats *stats.Stats)
+	OnCursorMove(moxedX int, movedY int, stats *stats.Stats) bool
 	OnNewPullData(pr *datasource.PullRequest)
 }
 
@@ -30,6 +47,73 @@ type PRView struct {
 	needsSort                  bool
 	currentlySelectedPullIndex int
 	cursor                     CursorPos
+
+	selectedPRInteractionState PRInteractionState
+}
+
+func (p *PRView) Clear() {
+	p.pulls = []*datasource.PullRequest{}
+	p.currentlySelectedPullIndex = 0
+}
+
+func (p *PRView) OnSelectedPRChange(from *datasource.PullRequest, to *datasource.PullRequest, lastInteractionState PRInteractionState, stats *stats.Stats) {
+	if lastInteractionState == PRInteractionStateSelected || lastInteractionState == PRInteractionStateNone {
+		// the previous PR was not interacted with
+		stats.OnPassPR(from)
+	}
+	// for now all we are looking for here is situations where PRs were passed over
+}
+
+func (p *PRView) GetSelectedIndex() int {
+	return p.currentlySelectedPullIndex
+}
+
+func (p *PRView) GetPulls() []*datasource.PullRequest {
+	return p.pulls
+}
+
+func (p *PRView) GetSelectedPull() *datasource.PullRequest {
+	return p.pulls[p.currentlySelectedPullIndex]
+}
+func (p *PRView) OnViewDetails(cursor CursorPos, stats *stats.Stats) {
+	p.selectedPRInteractionState = PRInteractionStateViewed
+	stats.OnViewPR(p.GetSelectedPull())
+}
+
+func (p *PRView) OnCursorMove(moxedX int, movedY int, stats *stats.Stats) bool {
+	p.cursor.Y += movedY
+	p.cursor.Y = mathutil.Clamp(p.cursor.Y, 0, max(len(p.pulls)-1, 0))
+
+	if movedY == 0 {
+		return false
+	}
+
+	// cursor moved
+	if p.currentlySelectedPullIndex != p.cursor.Y {
+		currentPR := p.pulls[p.currentlySelectedPullIndex]
+		nextPR := p.pulls[p.cursor.Y]
+		p.OnSelectedPRChange(currentPR, nextPR, p.selectedPRInteractionState, stats)
+	}
+
+	p.currentlySelectedPullIndex = p.cursor.Y
+	p.selectedPRInteractionState = PRInteractionStateSelected
+	return true
+}
+
+func (p *PRView) NeedsSort() bool {
+	return p.needsSort
+}
+
+func (p *PRView) OnSelect(cursor CursorPos, stats *stats.Stats) {
+	pull := p.pulls[p.currentlySelectedPullIndex]
+
+	now := time.Now()
+	pull.ViewedAt = &now
+
+	openbrowser(*pull.GithubPR.HTMLURL)
+	stats.OnOpenPR(pull)
+	tracking.SendMetric("open.active")
+	p.selectedPRInteractionState = PRInteractionStateOpened
 }
 
 func BuildHeader(viewWidth int, viewHeight int) string {
@@ -107,17 +191,16 @@ func BuildPRView(p PRViewData, viewWidth int, viewHeight int, isRefreshing bool)
 
 	prSection := strings.Builder{}
 	if len(pulls) > 0 {
-		viewablePulls := pulls[selectedIndex:len(pulls)]
+		viewablePulls := pulls[selectedIndex:mathutil.Min(selectedIndex+MaxRenderedPRs, len(pulls))]
 		for i := range viewablePulls {
 			pr := viewablePulls[i]
 
 			if i == 0 {
 				prSection.WriteString(
-					pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", pr.PR.GetTitle())))
+					pullListStyleSelected.Copy().Width(viewWidth).Render(fmt.Sprintf(">>> %s", pr.GithubPR.GetTitle())))
 			} else {
 				prSection.WriteString(
-					pullListStyle.Copy().Width(viewWidth).Render(*pr.PR.Title))
-
+					pullListStyle.Copy().Width(viewWidth).Render(*pr.GithubPR.Title))
 			}
 			prSection.WriteString("\n")
 			prSection.WriteString(BuildPRFooter(p, viewWidth, pr))
@@ -147,35 +230,49 @@ func BuildPRFooter(p PRViewData, viewWidth int, pr *datasource.PullRequest) stri
 
 	var statusTag string
 	if pr.IsApproved {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagSuccessStyle).Render("APPROVED")
+		statusTag = prTagStyle.Copy().Width(20).Inherit(tagSuccessStyle).Render("APPROVED")
 	} else if pr.IsAbandoned {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Background(darkerGrey).Render("ABANDONED 💀")
+		statusTag = prTagStyle.Copy().Width(20).Inherit(tagStyle).Background(darkerGrey).Render("ABANDONED 💀")
 	} else if pr.IsDraft {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Render("DRAFT")
+		statusTag = prTagStyle.Copy().Width(20).Inherit(tagStyle).Render("DRAFT")
 	} else if pr.HasChangesAfterLastComment {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagAlertStyle).Render("NEEDS REVIEW")
+		statusTag = prTagStyle.Copy().Width(20).Inherit(tagAlertStyle).Render("NEEDS REVIEW")
 	} else {
-		statusTag = prTagLeftStyle.Copy().Inherit(tagStyle).Render("OK")
+		statusTag = prTagStyle.Copy().Width(20).Inherit(tagStyle).Render("OK")
 	}
 
-	viewedIcon := ""
+	beenViewedTag := ""
 	if pr.ViewedAt != nil {
-		viewedIcon = prTagLeftStyle.Copy().Inherit(tagSuccessStyle).Render("OPENED")
+		beenViewedTag = prTagStyle.Copy().Inherit(tagSuccessStyle).Copy().Width(20).Render("VIEWED")
 	}
 
-	age := time.Now().Sub(pr.FirstCommitTime)
-	commitsCountTag := prTagLeftStyle.Copy().Render(fmt.Sprintf("Commits: %d", pr.NumCommits))
-	ageTag := prTagRightStyle.Copy().Render(fmt.Sprintf("Age %sh", formatDurationDayHour(age)))
-	orgRepoTag := prTagLeftStyle.Copy().
-		Width(viewWidth - 2 - w(commitsCountTag) - w(ageTag)).
-		Render(fmt.Sprintf("%s/%s", pr.OrgName, pr.RepoName))
+	newChangesTag := ""
+	if pr.HasNewChanges {
+		newChangesTag = prTagStyle.Copy().Inherit(tagBlueStyle).Copy().Width(20).Render("NEW CHANGES")
+	}
 
-	wait := time.Now().Sub(pr.LastCommitTime) // TODO : should be pr open time
-	waitTag := prTagLeftStyle.Copy().Render(fmt.Sprintf("Wait %sh", formatDurationDayHour(wait)))
+	// upper
+	age := time.Since(pr.FirstCommitTime)
+	commitsCountTag := prTagStyle.Copy().Width(20).Render(fmt.Sprintf("Commits: %d", pr.NumCommits))
+
+	orgRepoStr := fmt.Sprintf("%s/%s", pr.OrgName, pr.RepoName)
+	orgRepoTag := prTagStyle.Copy().Render(orgRepoStr)
+
+	ageTag := prTagRightStyle.Copy().Render(fmt.Sprintf("Age %sh", formatDurationDayHour(age)))
+
+	upperSpacerWidth := viewWidth - 2 - w(commitsCountTag) - w(orgRepoTag) - w(ageTag)
+	upperSpacer := prTagSpacerStyle.Copy().Width(upperSpacerWidth).Render("")
+
+	// lower
+	wait := time.Now().Sub(pr.LastCommitTime)
+	waitTag := prTagStyle.Copy().Width(20).Render(fmt.Sprintf("Wait %sh", formatDurationDayHour(wait)))
+
 	authorTag := prTagRightStyle.Copy().Render(pr.Author)
-	beenViewedTag := prTagLeftStyle.Copy().
-		Width(viewWidth - 2 - w(statusTag) - w(waitTag) - w(authorTag)).
-		Render(viewedIcon)
+
+	lowerSpacerWidth := viewWidth - 2 - w(statusTag) - w(waitTag) - w(beenViewedTag) - w(authorTag) - w(newChangesTag)
+	lowerSpacer := prTagStyle.Copy().
+		Width(lowerSpacerWidth).
+		Render("")
 
 	/*
 		fields:
@@ -188,13 +285,14 @@ func BuildPRFooter(p PRViewData, viewWidth int, pr *datasource.PullRequest) stri
 		- viewed
 
 		layout:
-		num commits   | org/repo name         ----  age
-		status        | wait       | viewed ---- author
+		num commits   | org/repo name                 ----  age
+		status        | wait       | viewed | changes ---- author
 	*/
 
 	topBar := lipgloss.JoinHorizontal(lipgloss.Top,
 		commitsCountTag,
 		orgRepoTag,
+		upperSpacer,
 		ageTag,
 	)
 
@@ -202,6 +300,8 @@ func BuildPRFooter(p PRViewData, viewWidth int, pr *datasource.PullRequest) stri
 		statusTag,
 		waitTag,
 		beenViewedTag,
+		newChangesTag,
+		lowerSpacer,
 		authorTag,
 	)
 

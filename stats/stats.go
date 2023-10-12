@@ -32,6 +32,7 @@ type PRStatsV1 struct {
 	TimeSinceLastComment       time.Duration
 	TimeSinceLastCommit        time.Duration
 	TimeSinceFirstCommit       time.Duration
+	PreviouslyOpened           bool
 }
 
 type Stats struct {
@@ -135,6 +136,13 @@ func (s *Stats) OnOpenPR(pr *datasource.PullRequest) {
 	go AppendEventToTrainingData("open", pr)
 }
 
+func (s *Stats) OnPassPR(pr *datasource.PullRequest) {
+	// always save after edits
+	defer s.SaveToFile()
+
+	go AppendEventToTrainingData("pass", pr)
+}
+
 func (s *Stats) SaveToFile() error {
 	statsPath, err := config.GetStatsFilePath()
 	if err != nil {
@@ -178,6 +186,7 @@ func AppendEventToTrainingData(eventName string, pr *datasource.PullRequest) err
 		TimeSinceLastComment:       pr.TimeSinceLastComment,
 		TimeSinceLastCommit:        pr.TimeSinceLastCommit,
 		TimeSinceFirstCommit:       pr.TimeSinceFirstCommit,
+		PreviouslyOpened:           pr.ViewedAt != nil,
 	}
 
 	data, err := json.Marshal(&eventData)
